@@ -45,7 +45,7 @@ n <- 1000
 theta_0Y <- c(1,0,0,0,1)
 theta_1Y <- c(1, 1, 1, 0, 0)
 theta_0Z <- c(0.25,0.25,0,0,0.25)
-theta_1Z <- rep(0.5,5)
+theta_1Z <- c(0.5,0.5,0.5,0.5,0.5)
 
 #params
 params <- list(theta_0Y, theta_1Y, theta_0Z, theta_1Z)
@@ -61,36 +61,45 @@ X <- mvrnorm(n=n, mu=rep(0,p), diag(p) )
 #             trt_rule(C_X) * as.vector( params_list[[4]] %*% t(X) ) )
 #######################
 
-M <- 1.5
-lambda <- 0.3
+M <- seq(0.1,3,0.1)
+lambda <- seq(0.1,1,0.1)
 
-# Obtain eta^{opt} and assume it is the clinicians decision rule.
-clin_eta_opt <- function( eta, X, params_list, M, lambda){
+for(i in 1:length(M)){
+  for(j in 1:length(lambda)){
+    
+  # Obtain eta^{opt} and assume it is the clinicians decision rule.
+  clin_eta_opt <- function( eta, X, params_list, M, lambda){
+    
+    etax <- as.vector(eta %*% t(X))
+    
+    EY <- mean( as.vector( params_list[[1]] %*% t(X) ) + 
+                trt_rule(etax) * as.vector( params_list[[2]] %*% t(X) ) ) 
+    
+    EZ_lambda <-  mean( as.vector( params_list[[3]] %*% t(X) ) + 
+                  trt_rule(etax) * as.vector( params_list[[4]] %*% t(X) ) ) - lambda
   
-  etax <- as.vector(eta %*% t(X))
+    # Penalized Value function.
+    V_pen <- EY - M * hinge(EZ_lambda)
+    
+    #print(EY);print(hinge(EZ_lambda));print(V_pen)
+    
+    return(V_pen)
+  }
   
-  EY <- mean( as.vector( params_list[[1]] %*% t(X) ) + 
-              trt_rule(etax) * as.vector( params_list[[2]] %*% t(X) ) ) 
   
-  EZ_lambda <-  mean( as.vector( params_list[[3]] %*% t(X) ) + 
-                trt_rule(etax) * as.vector( params_list[[4]] %*% t(X) ) ) - lambda
-
-  # Penalized Value function.
-  V_pen <- EY - M * hinge(EZ_lambda)
+  eta_func <- function(eta){-clin_eta_opt(eta=eta, X=X, params_list = params,
+                                        M=M[i], lambda = lambda[j])}
   
-  #print(EY);print(hinge(EZ_lambda))
+  eta_initial <- rep(1,5)
   
-  return(V_pen)
+  eta_opt <- optim(par = eta_initial, 
+                    eta_func,
+                    method = "BFGS"
+                  )$par
+  
+  print(eta_opt)
+  }
 }
-
-
-eta_func <- function(eta){clin_eta_opt(eta=eta, X=X, params_list = params,
-                                      M=M, lambda = lambda)}
-
-eta_opt <- optim(par = c(1,1,1,0,0), 
-                  eta_func,
-                  method = "BFGS"
-                )$par
 
 patient_rule <- as.vector(eta_opt %*% t(X))
 
