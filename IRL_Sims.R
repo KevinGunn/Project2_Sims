@@ -64,8 +64,10 @@ X <- mvrnorm(n=n, mu=rep(0,p), diag(p) )
 M <- seq(0.1,3,0.1)
 lambda <- seq(0.1,1,0.1)
 
-for(i in 1:length(M)){
-  for(j in 1:length(lambda)){
+grid <- expand.grid(M,lambda)
+V <- rep(0,nrow(grid))
+
+for(i in 1:nrow(grid)){
     
   # Obtain eta^{opt} and assume it is the clinicians decision rule.
   clin_eta_opt <- function( eta, X, params_list, M, lambda){
@@ -87,19 +89,24 @@ for(i in 1:length(M)){
   }
   
   
-  eta_func <- function(eta){-clin_eta_opt(eta=eta, X=X, params_list = params,
-                                        M=M[i], lambda = lambda[j])}
+  eta_func <- function(eta){ - clin_eta_opt(eta=eta, X=X, params_list = params,
+                                        M=grid[i,1], lambda = grid[i,2])}
   
-  eta_initial <- rep(1,5)
+  eta_initial <- rep(0,5)
   
   eta_opt <- optim(par = eta_initial, 
                     eta_func,
                     method = "BFGS"
                   )$par
   
-  print(eta_opt)
-  }
+  print(eta_opt);print(eta_func(eta_opt))
+  V[i] <- eta_func(eta_opt)
+  
 }
+
+
+grid[which.min(V),]
+V[which.min(V)]
 
 patient_rule <- as.vector(eta_opt %*% t(X))
 
