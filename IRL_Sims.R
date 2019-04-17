@@ -87,14 +87,16 @@ clin_eta_opt <- function( eta, X, params_list, M, lambda){
 eta_func <- function(eta){clin_eta_opt(eta=eta, X=X, params_list = params,
                                       M=M, lambda = lambda)}
 
-optim(par = c(1,1,1,0,0), 
-      eta_func,
-      method = "BFGS"
-      )
+eta_opt <- optim(par = c(1,1,1,0,0), 
+                  eta_func,
+                  method = "BFGS"
+                )$par
+
+patient_rule <- as.vector(eta_opt %*% t(X))
 
 
 # Treatment
-A <- ????
+A <- trt_rule(patient_rule)
 
 # Main Outcome of Interest
 Y <- as.vector( theta_0Y %*% t(X) ) + A * as.vector( theta_1Y %*% t(X) ) + rnorm(n)
