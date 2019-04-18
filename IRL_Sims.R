@@ -225,15 +225,21 @@ for (i in 1:length(lambda_est)) {
   
   # Create data matrix for svm.
   mu_mat <- rbind(mu_clin, mu_learner)
+  colnames(mu_mat) <- c("VY","VZ_tol")
+  rownames(mu_mat) <- NULL
   Labels <- c(1,-1)
   L_mu_mat <- cbind(Labels,mu_mat)
   
   while(q > eps){
                 
-    classifier = svm(formula = Purchased ~ ., 
-                 data = training_set, 
+    IRL <- svm(formula = Labels ~ ., 
+                 data = L_mu_mat, 
                  type = 'C-classification', 
                  kernel = 'linear') 
+    
+    w <- IRL$coefs[1]
+    
+    
 
   }
   
