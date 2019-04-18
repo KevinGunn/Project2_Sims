@@ -70,6 +70,7 @@ lambda <- seq(0.1,2,0.1)
 
 grid <- expand.grid(M,lambda)
 V <- rep(0,nrow(grid))
+eta_opt_mat <- matrix(0,ncol=5,nrow=nrow(grid))
 
 for(i in 1:nrow(grid)){
     
@@ -105,6 +106,7 @@ for(i in 1:nrow(grid)){
                   )
   
   #print(eta_opt);print(eta_func(eta_opt$par))
+  eta_opt_mat[i,] <- eta_opt$par
   V[i] <- eta_func(eta_opt$par)
   
 }
@@ -133,13 +135,17 @@ p <- plot_ly(gv_df, x = ~M, y = ~lambda, z = ~-V,
 p
 
 
+# Based on scatterplot let M=0.9 and lambda=0.2.
+M_opt = 0.9; lambda_opt = 0.2; eta_opt <- eta_opt_mat[59,]
+
 #################################################################################
 
-patient_rule <- as.vector(eta_opt %*% t(X))
+#Generation of Data assuming clinician makes optimal decision.
 
+opt_rule <- as.vector(eta_opt %*% t(X))
 
 # Treatment
-A <- trt_rule(patient_rule)
+A <- trt_rule(opt_rule)
 
 # Main Outcome of Interest
 Y <- as.vector( theta_0Y %*% t(X) ) + A * as.vector( theta_1Y %*% t(X) ) + rnorm(n)
@@ -147,6 +153,8 @@ Y <- as.vector( theta_0Y %*% t(X) ) + A * as.vector( theta_1Y %*% t(X) ) + rnorm
 # Risk Outcome
 Z <- as.vector( theta_0Z %*% t(X) ) + A * as.vector( theta_1Z %*% t(X) ) + rnorm(n)
 
+
+###################################################################################
 
 
 
