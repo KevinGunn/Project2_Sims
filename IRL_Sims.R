@@ -8,7 +8,7 @@
 # Git: https://github.com/KevinGunn/Project2_Sims.git
 # Git Instructions:
 
-#Step 1 - Update local repository
+#Step 1 - Make/Update local repository
 
 #$ cd /path/to/my/codebase
 #$ git init      (1)
@@ -24,8 +24,8 @@
 
 
 # Libraries
-
 library(MASS)
+library(plotly)
 
 #set seed
 set.seed(12345)
@@ -61,8 +61,12 @@ X <- mvrnorm(n=n, mu=rep(0,p), diag(p) )
 #             trt_rule(C_X) * as.vector( params_list[[4]] %*% t(X) ) )
 #######################
 
-M <- seq(0.1,3,0.1)
-lambda <- seq(0.1,1,0.1)
+########################################################################
+
+## Plot all combinations of M and lambda to get a reasonable value for their optimal values.
+
+M <- seq(0.1,5,0.1)
+lambda <- seq(0.1,2,0.1)
 
 grid <- expand.grid(M,lambda)
 V <- rep(0,nrow(grid))
@@ -89,24 +93,47 @@ for(i in 1:nrow(grid)){
   }
   
   
-  eta_func <- function(eta){ - clin_eta_opt(eta=eta, X=X, params_list = params,
+  eta_func <- function(eta){ clin_eta_opt(eta=eta, X=X, params_list = params,
                                         M=grid[i,1], lambda = grid[i,2])}
   
   eta_initial <- rep(0,5)
   
   eta_opt <- optim(par = eta_initial, 
                     eta_func,
+                    control=list(fnscale=-1),
                     method = "BFGS"
-                  )$par
+                  )
   
-  print(eta_opt);print(eta_func(eta_opt))
-  V[i] <- eta_func(eta_opt)
+  #print(eta_opt);print(eta_func(eta_opt$par))
+  V[i] <- eta_func(eta_opt$par)
   
 }
 
+grid_vals <- cbind(grid,V); colnames(grid_vals) <- c("M","lambda","V")
+gv_df <- as.data.frame(grid_vals)
 
-grid[which.min(V),]
-V[which.min(V)]
+# Scatterplot
+p <- plot_ly(gv_df, x = ~M, y = ~lambda, z = ~-V, 
+             marker = list(color = ~V, colorscale = c('#FFE1A1', '#683531'), 
+                           showscale = TRUE)) %>%
+  add_markers() %>%
+  layout(scene = list(xaxis = list(title = 'M'),
+                      yaxis = list(title = 'Lambda'),
+                      zaxis = list(title = 'V')),
+  
+    annotations = list(
+          x = 1,
+          y = 0.5,
+          text = 'Negative of Value Function',
+          xref = 'paper',
+          yref = 'paper',
+          showarrow = FALSE
+    ))
+
+p
+
+
+#################################################################################
 
 patient_rule <- as.vector(eta_opt %*% t(X))
 
