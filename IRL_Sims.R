@@ -187,9 +187,10 @@ VY_est <- function(rule){ mean( QY$coefficients[1] +
                       rule*as.vector(QY$coefficients[-(1:(1+p))] %*% t(X)) ) 
 }
 
-VZ_est <- function(rule){ mean( QZ$coefficients[1] + 
+VZ_tol_est <- function(rule, tol){ mean( QZ$coefficients[1] + 
                               as.vector(QZ$coefficients[2:(1+p)] %*% t(X)) +
-                              rule*as.vector(QZ$coefficients[-(1:(1+p))] %*% t(X)) ) 
+                              rule*as.vector(QZ$coefficients[-(1:(1+p))] %*% t(X)) )
+                              - tol
 }
 
 # Start algorithm.
@@ -207,12 +208,28 @@ for (i in 1:length(lambda_est)) {
   V_Y_clin <- mean(Y)
   V_Z_clin_tol <- mean(Z) - lambda_est[i]
 
-  mu_clin <- c( V_Y_clin, hinge(V_Z_clin_tol) )
+  mu_clin <- c( V_Y_clin, - hinge(V_Z_clin_tol) )
   
   # Initialize decision rule
-  lin_rules_1 <- rep(0.1,5)
+  lin_rule_coeff <- rep(0.1,5)
+  lin_mod1 <- as.vector(lin_rule_coeff %*% t(X))
+  rule1 <- trt_rule(lin_mod1)
   
-classifier = svm(formula = Purchased ~ ., 
+  VY_learner <- VY(rule1)
+  VZ_learner <- VZ_tol_est(rule1, lambda_est[i])
+  
+  mu_learner <- c(VY_learner, - hinge(VZ_learner) )
+  
+  # Begin AL-IRL
+  k = 1;q=1;eps = 0.01
+  
+  while(q > eps){
+                
+    classifier = svm(formula = Purchased ~ ., 
                  data = training_set, 
                  type = 'C-classification', 
                  kernel = 'linear') 
+
+  }
+  
+}
