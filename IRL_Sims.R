@@ -38,17 +38,25 @@ hinge <- function(s){ ifelse(s>0,s,0) }
 
 trt_rule <- function(z){ ifelse(z>0,1,0) }
 
+empirical_value <- function(rule,trt,prop,outcome){
+  
+  mean(ifelse(rule==trt,1,0)*prop^(-1)*outcome)
+  
+}
+
 # Provide Settings:
 
 p <- 5
 n <- 1000
-
-theta_0Y <- c(1,0,0,0,1)
-theta_1Y <- c(1, 1, 1, 0, 0)
-theta_0Z <- c(0.25,0.25,0,0,0.25)
-theta_1Z <- c(0.5,0.5,0.5,0.5,0.5)
+sims <- 500
 
 #params
+
+theta_0Y <- c(1,0,0,0,1)
+theta_1Y <- c(0.2, 0.25, 0.25, 0, 0)
+theta_0Z <- c(1,0.25,1,0,0.25)
+theta_1Z <- c(0.5,0.5,0.5,-0.5,1)
+
 params <- list(theta_0Y, theta_1Y, theta_0Z, theta_1Z)
 
 # Generate Covariates Data 
@@ -67,7 +75,7 @@ X <- mvrnorm(n=n, mu=rep(0,p), diag(p) )
 ## Plot all combinations of M and lambda to get a reasonable value for their optimal values.
 
 M <- seq(0.1,5,0.1)
-lambda <- seq(0.1,2,0.1)
+lambda <- seq(0.1,3,0.1)
 
 grid <- expand.grid(M,lambda)
 V <- rep(0,nrow(grid))
@@ -116,13 +124,13 @@ grid_vals <- cbind(grid,V); colnames(grid_vals) <- c("M","lambda","V")
 gv_df <- as.data.frame(grid_vals)
 
 # Scatterplot
-p <- plot_ly(gv_df, x = ~M, y = ~lambda, z = ~-V, 
+plot_3d <- plot_ly(gv_df, x = ~M, y = ~lambda, z = ~-V, 
              marker = list(color = ~ V, colorscale = c('#FFE1A1', '#683531'), 
                            showscale = TRUE)) %>%
   add_markers() %>%
   layout(scene = list(xaxis = list(title = 'M'),
                       yaxis = list(title = 'Lambda'),
-                      zaxis = list(title = 'V')),
+                      zaxis = list(title = '-V')),
   
     annotations = list(
           x = 1,
@@ -133,20 +141,27 @@ p <- plot_ly(gv_df, x = ~M, y = ~lambda, z = ~-V,
           showarrow = FALSE
     ))
 
-p
+plot_3d
 
 
-# Based on scatterplot let M=0.9 and lambda=0.2.
-M_opt = 0.9; lambda_opt = 0.2; eta_opt <- eta_opt_mat[59,]
+# Based on scatterplot let M=3.7, lambda=0.2, and V = 0.1164.
+M_opt = 3.7; lambda_opt = 0.2; eta_opt <- eta_opt_mat[87,]
 
 #################################################################################
 
 #Generation of Data assuming clinician makes optimal decision.
 
-opt_rule <- as.vector(eta_opt %*% t(X))
+# 100% Correct decisions
+opt_model <- as.vector(eta_opt %*% t(X))
+
+# Add error to optimal model so clinician is slightly imperfect.
+clin_model <- opt_model + rnorm(n,0,1.5)
+
+# Clinician is approximately 91% correct.
+sum(trt_rule(opt_model) == trt_rule(clin_model))  
 
 # Treatment
-A <- trt_rule(opt_rule)
+A <- trt_rule(clin_model)
 
 # Main Outcome of Interest
 Y <- as.vector( theta_0Y %*% t(X) ) + A * as.vector( theta_1Y %*% t(X) ) + rnorm(n)
@@ -157,6 +172,47 @@ Z <- as.vector( theta_0Z %*% t(X) ) + A * as.vector( theta_1Z %*% t(X) ) + rnorm
 
 ###################################################################################
 
-# Apprenticeship Learning for IRL in Causal Data.
+# Fit propensity score
+prop_score_model <- glm(A ~ X, family="binomial")
+
+prop_score <- prop_score_model$fitted.values
+
+# Q-model to find theta values
+
+QY <- lm(Y ~ X + A:X)
+QZ <- lm(Z ~ X + A:X)
+
+VY_est <- function(rule){ mean( QY$coefficients[1] + 
+                      as.vector(QY$coefficients[2:(1+p)] %*% t(X)) +
+                      rule*as.vector(QY$coefficients[-(1:(1+p))] %*% t(X)) ) 
+}
+
+VZ_est <- function(rule){ mean( QZ$coefficients[1] + 
+                              as.vector(QZ$coefficients[2:(1+p)] %*% t(X)) +
+                              rule*as.vector(QZ$coefficients[-(1:(1+p))] %*% t(X)) ) 
+}
+
+# Start algorithm.
+# Create empty matrices to store values in.
+
+lin_rules_mat <- matrix(0,ncol=5,nrow=sims)
+
+#Step 1 - Grid Search
+lambda_est <- seq(0.1,0.3,0.05)
 
 
+for (i in 1:length(lambda_est)) {
+  
+  # Clinicians Value function
+  V_Y_clin <- mean(Y)
+  V_Z_clin_tol <- mean(Z) - lambda_est[i]
+
+  mu_clin <- c( V_Y_clin, hinge(V_Z_clin_tol) )
+  
+  # Initialize decision rule
+  lin_rules_1 <- rep(0.1,5)
+  
+classifier = svm(formula = Purchased ~ ., 
+                 data = training_set, 
+                 type = 'C-classification', 
+                 kernel = 'linear') 
