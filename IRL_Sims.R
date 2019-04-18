@@ -187,10 +187,10 @@ VY_est <- function(rule){ mean( QY$coefficients[1] +
                       rule*as.vector(QY$coefficients[-(1:(1+p))] %*% t(X)) ) 
 }
 
-VZ_tol_est <- function(rule, tol){ mean( QZ$coefficients[1] + 
-                              as.vector(QZ$coefficients[2:(1+p)] %*% t(X)) +
-                              rule*as.vector(QZ$coefficients[-(1:(1+p))] %*% t(X)) )
-                              - tol
+VZ_tol_est <- function(rule, tol){
+  
+  VZ = mean( QZ$coefficients[1] + as.vector(QZ$coefficients[2:(1+p)] %*% t(X)) + rule*as.vector(QZ$coefficients[-(1:(1+p))] %*% t(X)) )
+  return(VZ - tol)                            
 }
 
 # Start algorithm.
@@ -211,17 +211,22 @@ for (i in 1:length(lambda_est)) {
   mu_clin <- c( V_Y_clin, - hinge(V_Z_clin_tol) )
   
   # Initialize decision rule
-  lin_rule_coeff <- rep(0.1,5)
+  lin_rule_coeff <- rep(0.01,5)
   lin_mod1 <- as.vector(lin_rule_coeff %*% t(X))
   rule1 <- trt_rule(lin_mod1)
   
-  VY_learner <- VY(rule1)
+  VY_learner <- VY_est(rule1)
   VZ_learner <- VZ_tol_est(rule1, lambda_est[i])
   
   mu_learner <- c(VY_learner, - hinge(VZ_learner) )
   
   # Begin AL-IRL
   k = 1;q=1;eps = 0.01
+  
+  # Create data matrix for svm.
+  mu_mat <- rbind(mu_clin, mu_learner)
+  Labels <- c(1,-1)
+  L_mu_mat <- cbind(Labels,mu_mat)
   
   while(q > eps){
                 
