@@ -26,6 +26,7 @@
 # Libraries
 library(MASS)
 library(plotly)
+library(e1071)
 
 #set seed
 set.seed(12345)
@@ -116,7 +117,7 @@ gv_df <- as.data.frame(grid_vals)
 
 # Scatterplot
 p <- plot_ly(gv_df, x = ~M, y = ~lambda, z = ~-V, 
-             marker = list(color = ~V, colorscale = c('#FFE1A1', '#683531'), 
+             marker = list(color = ~ V, colorscale = c('#FFE1A1', '#683531'), 
                            showscale = TRUE)) %>%
   add_markers() %>%
   layout(scene = list(xaxis = list(title = 'M'),
@@ -156,6 +157,6 @@ Z <- as.vector( theta_0Z %*% t(X) ) + A * as.vector( theta_1Z %*% t(X) ) + rnorm
 
 ###################################################################################
 
-
+# Apprenticeship Learning for IRL in Causal Data.
 
 
