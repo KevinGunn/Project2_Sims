@@ -30,7 +30,10 @@ library(plotly)
 #library(svmadmm)
 #library(SVMMaj)
 #library(e1071)
+library(dfoptim)
+library(glmnet)
 library(quadprog)
+library(modopt.matlab)
 
 #set seed
 set.seed(12345)
@@ -62,7 +65,7 @@ clin_eta_opt <- function( eta, X, params_list, M, lambda){
                         trt_rule(etax) * as.vector( params_list[[4]] %*% t(X) ) ) - lambda
   
   # Penalized Value function.
-  V_pen <- EY - M * hinge(EZ_lambda)
+  V_pen <- EY + M * hinge(EZ_lambda)
   
   #print(EY);print(hinge(EZ_lambda));print(V_pen)
   
@@ -79,8 +82,8 @@ sims <- 500
 
 theta_0Y <- c(1,0,0,0,1)
 theta_1Y <- c(0.2, 0.25, 0.25, 0, 0)
-theta_0Z <- c(1,0.25,1,0,0.25)
-theta_1Z <- c(1,1,0.5,0.5,1)
+theta_0Z <- c(1,0,1,0,0)
+theta_1Z <- c(3,3,1.5,1.5,1)
 
 params <- list(theta_0Y, theta_1Y, theta_0Z, theta_1Z,0,0)
 
@@ -99,12 +102,13 @@ X <- mvrnorm(n=n, mu=rep(0,p), diag(p) )
 
 ## Plot all combinations of M and lambda to get a reasonable value for their optimal values.
 
-M <- seq(0.1,5,0.1)
-lambda <- seq(0.1,3,0.1)
+M <- seq(1,5,1)
+lambda <- seq(0.05,4,0.05)
 
 grid <- expand.grid(M,lambda)
 V <- rep(0,nrow(grid))
 eta_opt_mat <- matrix(0,ncol=5,nrow=nrow(grid))
+EY_EZ <- matrix(0,ncol=2,nrow=nrow(grid))
 
 for(i in 1:nrow(grid)){
     
@@ -113,15 +117,26 @@ for(i in 1:nrow(grid)){
   
   eta_initial <- rep(0,5)
   
-  eta_opt <- optim(par = eta_initial, 
-                    eta_func,
-                    control=list(fnscale=-1),
-                    method = "BFGS"
-                  )
+  #eta_opt <- optim(par = eta_initial, 
+  #                  eta_func,
+  #                  control=list(fnscale=-1),
+  #                  method = "BFGS"
+  #                )
   
-  #print(eta_opt);print(eta_func(eta_opt$par))
+  eta_opt <- nmk(par = eta_initial, 
+                   eta_func,
+                   control=list(maximize=TRUE)
+  )
+  
+  print(eta_opt$message);print(eta_func(eta_opt$par))
   eta_opt_mat[i,] <- eta_opt$par
   V[i] <- eta_func(eta_opt$par)
+  EY_EZ[i,1] <- mean( params[[5]] + as.vector( params[[1]] %*% t(X) ) + 
+                trt_rule(as.vector(eta_opt$par %*% t(X))) * as.vector( params[[2]] %*% t(X) ) ) 
+  
+  EY_EZ[i,2] <-  hinge(mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) + 
+                        trt_rule(as.vector(eta_opt$par %*% t(X))) * as.vector( params[[4]] %*% t(X) ) ) - grid[i,2])
+  
   
 }
 
@@ -129,7 +144,7 @@ grid_vals <- cbind(grid,V); colnames(grid_vals) <- c("M","lambda","V")
 gv_df <- as.data.frame(grid_vals)
 
 # Scatterplot
-plot_3d <- plot_ly(gv_df, x = ~M, y = ~lambda, z = ~-V, 
+plot_3d <- plot_ly(gv_df, x = ~M, y = ~lambda, z = ~ V, 
              marker = list(color = ~ V, colorscale = c('#FFE1A1', '#683531'), 
                            showscale = TRUE)) %>%
   add_markers() %>%
@@ -150,7 +165,9 @@ plot_3d
 
 
 # Based on scatterplot let M=3.7, lambda=0.2, and V = 0.1164.
-M_opt = 0.7; lambda_opt = 0.4; eta_opt <- eta_opt_mat[157,]
+EY_EZ
+#M_opt = gv_df[162,1]; lambda_opt = gv_df[162,2]; eta_opt <- eta_opt_mat[162,]
+M_opt = gv_df[3,1]; lambda_opt = gv_df[3,2]; eta_opt <- eta_opt_mat[3,]
 
 #################################################################################
 
@@ -180,6 +197,23 @@ Z <- as.vector( theta_0Z %*% t(X) ) + A * as.vector( theta_1Z %*% t(X) ) + rnorm
 
 
 ###################################################################################
+
+# Obtain value function for eta^{opt} estimate.
+value_eta <- function( eta, X, params_list, M, lambda){
+  
+  etax <- as.vector(eta %*% t(X))
+  
+  EY <- mean( params_list[[5]] + as.vector( params_list[[1]] %*% t(X) ) + 
+                trt_rule(etax) * as.vector( params_list[[2]] %*% t(X) ) ) 
+  
+  EZ_lambda <-  mean( params_list[[6]] + as.vector( params_list[[3]] %*% t(X) ) + 
+                        trt_rule(etax) * as.vector( params_list[[4]] %*% t(X) ) ) - lambda
+  
+  # Penalized Value function.
+  V_pen <- EY + M * hinge(EZ_lambda)
+  
+  return(V_pen)
+}
 
 # Fit propensity score
 #prop_score_model <- glm(A ~ X, family="binomial")
@@ -212,10 +246,12 @@ VZ_tol_est <- function(rule, tol){
 
 lin_rules_mat <- matrix(0,ncol=5,nrow=sims)
 
-k_eta_mat <- matrix(0,ncol=5,nrow=100)
+k_eta_mat <- matrix(0,ncol=5,nrow=500)
 
 #Step 1 - Grid Search
-lambda_est <- seq(0.1,0.3,0.05)
+lambda_est <- seq(1.6,1.7,0.05)
+
+lambda_est <- seq(0,0.1,0.05)
 
 
 for (i in 1:length(lambda_est)) {
@@ -224,20 +260,20 @@ for (i in 1:length(lambda_est)) {
   V_Y_clin <- mean(Y)
   V_Z_clin_tol <- mean(Z) - lambda_est[i]
 
-  mu_clin <- c( V_Y_clin, - hinge(V_Z_clin_tol) )
+  mu_clin <- c( V_Y_clin, hinge(V_Z_clin_tol) )
   
   # Initialize decision rule
-  lin_rule_coeff <- c(0.25,0.6,1.3,0,0)
+  lin_rule_coeff <- c(1,1,1,0,0)
   lin_mod1 <- as.vector(lin_rule_coeff %*% t(X))
   rule1 <- trt_rule(lin_mod1)
   
   VY_learner <- VY_est(rule1)
   VZ_learner <- VZ_tol_est(rule1, lambda_est[i])
   
-  mu_learner <- c(VY_learner, - hinge(VZ_learner) )
+  mu_learner <- c(VY_learner, hinge(VZ_learner) )
   
   # Begin AL-IRL
-  k = 1;q=1;eps = 0.001
+  k = 1;q=1;eps = 0.0001
   
   eta_opt_k <- lin_rule_coeff
   
@@ -245,11 +281,12 @@ for (i in 1:length(lambda_est)) {
   mu_mat <- rbind(mu_clin, mu_learner)
   colnames(mu_mat) <- c("VY","VZ_tol")
   rownames(mu_mat) <- NULL
+  
   Labels <- c(1,-1)
   L_mu_mat <- cbind(Labels,mu_mat)
   L_mu_df <- as.data.frame(L_mu_mat)
   
-  while(k <= 100){
+  while(k <= 500){
                 
     #IRL.model <- svm(formula = Labels ~ ., 
     #             data = L_mu_df, 
@@ -263,39 +300,52 @@ for (i in 1:length(lambda_est)) {
     #q <- -IRL.model$rho
     
     m = length(mu_clin)
-    Dm = 2.0*diag(m) # min ||w||
+    Dm = diag(m) # min ||w||
     dv = rep(0,m)
-    Am = - t( as.matrix(L_mu_df[,-1]) )
-    bv = - L_mu_df$Labels
-    sol = solve.QP(Dm,dv,Am,bv)
+    #Am =  t( as.matrix(L_mu_df[,-1]) )
+    #bv =  L_mu_df$Labels
+    #sol = solve.QP(Dm,dv,Am,bv)
     
-    w = sol$solution / (norm(sol$solution))
+    Am = as.matrix(L_mu_df[c(1,k),-1])  #t( scale( as.matrix(L_mu_df[,-1]), center=FALSE )  )
+    bv = L_mu_df$Labels[1:2]
+    sol = quadprog(H = Dm, f = dv, A = -Am, b = -bv, lb=c(1,0.01), ub=c(1,50) )
     
+    #w = sol$solution 
+    w = sol$x
+    
+    # Get q.
     V_mat <- as.matrix(L_mu_df[,-1])
     
-    if(k==1){ q = abs(sum(w*(V_mat[1,] - V_mat[-1,])))
-    }else{
-      q =  abs( t(as.matrix(w)) %*% t( (V_mat[1,] - V_mat[-1,]) ) ) 
+    VY_diff <- V_mat[1,1] - V_mat[-1,1]
+    VZ_diff <- V_mat[1,2] - V_mat[-1,2]
+    V_diff <- cbind(VY_diff,VZ_diff)
       
+    if(k==1){ qk = abs(sum(w*V_diff))
+    }else{
+      qk =  abs( t(as.matrix(w)) %*% t( V_diff ) )
+      #qk =  min( abs( as.matrix(w) %*% t( V_diff ) ) )
     }
     
   
     # Plot of Value functions.
-    plot(L_mu_df[,-1],col="blue", pch=19)
+    plot(L_mu_df[,-1],col="blue", pch=19, main="Value Function Estimation")
     points(L_mu_df[1,-1],bg="red",pch=22) 
     # Hyperplane
-    #abline(a=-q[k]/w[2], b=-w[1]/w[2], col="green", lty=4)
+    #abline(a= qk[length(qk)]/w[2] , b=-w[1]/w[2] , col="green", lty=4)
+    
+    #ww = w / norm(w)
     
     # M estimate
-    M_k = w[2] / w[1] 
+    M_k = w[2]
     
     # Obtain estimate of eta^opt
-    eta_func <- function(eta){ clin_eta_opt(eta=eta, X=X, params_list = params_est,
-                                            M=M_k, lambda = lambda_est[i])}
+    eta_func <- function(eta){ value_eta(eta, X=X, params_list = params_est,
+                                            M=M_k, lambda = lambda_est[i]) }
 
-    eta_opt_k <- optim(par = rnorm(5), eta_func, control=list(fnscale=-1), 
-                       method = "BFGS")$par
+    eta_opt_k <- nmk(par = rep(1,5) , eta_func, control=list(maximize=TRUE))$par
+    
     k_eta_mat[k,] <- eta_opt_k
+    
     # Get decision rule.
     lin_modk <- as.vector(eta_opt_k %*% t(X))
     rulek <- trt_rule(lin_modk)
@@ -303,13 +353,18 @@ for (i in 1:length(lambda_est)) {
     VY_learner <- VY_est(rulek)
     VZ_learner <- VZ_tol_est(rulek, lambda_est[i])
     
-    mu_learner <- c(VY_learner, - hinge(VZ_learner) )
+    # Update data
+    mu_learner <- c(VY_learner, hinge(VZ_learner) )
     L_mu_df <- rbind(L_mu_df, c(-1,mu_learner) )
-   #print(L_mu_df);print(q);print(k);print(sol$solution)
-   #print(eta_opt);print(eta_opt_k)
-    print(M_k)
-    sum(rulek == A)
+    
+    
+    #sum(rulek == A)
+    
+    if(min(qk) <= eps){break}
+    
     k = k+1
   }
   
+  eta_opt_est <-  k_eta_mat[which.min(qk),]
+
 }
