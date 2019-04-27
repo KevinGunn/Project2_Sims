@@ -168,7 +168,7 @@ plot_3d
 
 # Based on scatterplot let M=3.7, lambda=0.2, and V = 0.1164.
 EY_EZ
-M_opt = gv_df[162,1]; lambda_opt = gv_df[162,2]; eta_opt <- eta_opt_mat[162,]
+M_opt = gv_df[167,1]; lambda_opt = gv_df[167,2]; eta_opt <- eta_opt_mat[167,]
 #M_opt = gv_df[3,1]; lambda_opt = gv_df[3,2]; eta_opt <- eta_opt_mat[3,]
 
 #################################################################################
@@ -217,10 +217,6 @@ value_eta <- function( eta, X, params_list, M, lambda){
   return(V_pen)
 }
 
-# Fit propensity score
-#prop_score_model <- glm(A ~ X, family="binomial")
-
-#prop_score <- prop_score_model$fitted.values
 
 # Q-model to find theta values
 
@@ -251,9 +247,7 @@ lin_rules_mat <- matrix(0,ncol=5,nrow=sims)
 k_eta_mat <- matrix(0,ncol=5,nrow=500)
 
 #Step 1 - Grid Search
-lambda_est <- seq(1.3,1.9,0.3)
-
-#lambda_est <- seq(0,0.1,0.05)
+lambda_est <- seq(1.4,2.0,0.3)
 
 
 for (i in 1:length(lambda_est)) {
@@ -289,56 +283,41 @@ for (i in 1:length(lambda_est)) {
   
   while(k <= 500){
     
-    
-    #Am <- cbind(L_mu_mat[c(1,k+1),-1],b,v1,v2)
-    
-    #model <- list()
-    
-    #model$A          <- A
-    #model$obj        <- c(0,0,0,1,1)
-    #model$modelsense <- 'm'
-    #model$rhs        <- c(1,-1)
-    #model$sense      <- c('>', '<')
-    #model$vtype      <- 'B'
-    #model$lb         <- c(-Inf,-Inf,-Inf,0,0)
-    
-    #params <- list(OutputFlag=0)
-    
-    #result <- gurobi(model, params)
-    
-    #print('Solution:')
-    #print(result$objval)
-    #print(result$x)
-    
+    # QP set up.
     m = length(mu_clin)
-    Dm = 2.0*diag(m+1) # min ||w||^2
-    Dm[1, 1] <- Dm[2, 2] <- 0.0000001
+    Dm = diag(m+1) # min ||w||^2
+    Dm[nrow(Dm)-2, ncol(Dm)-2] <- Dm[nrow(Dm)-1, ncol(Dm)-1] <- 0.0000001
     dv = rep(0,m+1)
     
-    Am <- cbind(L_mu_mat[c(1,k+1),-1],q)*Labels
-    bv = c(1,1)
-    sol = solve.QP(Dm,dv,t(Am),bv)
-    #sol = quadprog(H = Dm, f = dv, A = -Am, b = -bv, lb=c(1,0.01,-Inf), ub=c(1,50,Inf) )
-    #Mk <- sol$x[2]
-    #qk <- sol$x[3]
+    c_m1 <- c(1,1,0)
+    c_m2 <- rbind(c(1,0,0),c(0,1,0))
+    
+    VY_diff <- L_mu_mat[1,2] - L_mu_mat[-1,2]
+    VZ_diff <- L_mu_mat[1,3] - L_mu_mat[-1,3]
+    V_diff <- cbind(VY_diff,VZ_diff,-q)
+    
+    
+    Am <- rbind(c_m1, V_diff)#,c_m2 )
+    
+    bv <- c(1,rep(0,k))
+    sol <- solve.QP(Dm,dv,t(Am),bv,meq=1)
+
     Mk = sol$solution[2]/sol$solution[1]
     qk = sol$solution[3]
      
-    if(abs(qk)<eps){break}
-    
     
     # Plot of Value functions.
-    plot(L_mu_mat[,-1],col="blue", pch=19, main="Value Function Estimation")
-    points(L_mu_mat[1,-1],col="red",pch=19) 
+    plot(L_mu_mat[-1,-1],col="blue", pch=19, main="Value Function Estimation")
+    points(L_mu_mat[1,-1],bg="red",pch=22) 
     # Hyperplane
-    abline(a= -qk/Mk , b=-1/Mk , col="green", lty=4)
+    #abline( b=1/Mk , col="green", lty=4)
     
   
     # Obtain estimate of eta^opt
     eta_func <- function(eta){ value_eta(eta, X=X, params_list = params_est,
                                          M=Mk, lambda = lambda_est[i]) }
     
-    eta_opt_k <- nmk(par = rep(1,5) , eta_func, control=list(maximize=TRUE))$par
+    eta_opt_k <- nmk(par = rep(0,5) , eta_func, control=list(maximize=TRUE))$par
     
     k_eta_mat[k,] <- eta_opt_k
     
@@ -357,8 +336,11 @@ for (i in 1:length(lambda_est)) {
     #sum(rulek == A)
     # update iteration step.
     k = k+1
+    
+    if(k !=1 & abs(qk)<eps){break}
+    
   }
   
-  eta_opt_est <-  k_eta_mat[which.min(qk),]
+  eta_opt_est <-  eta_opt_k
   
 }
