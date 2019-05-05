@@ -152,10 +152,12 @@ for(i in 1:nrow(grid)){
   eta_opt_mat[i,] <- eta_opt$par
   V[i] <- eta_func(eta_opt$par)
   EY_EZ[i,1] <- mean( params[[5]] + as.vector( params[[1]] %*% t(X) ) + 
-                        trt_rule(as.vector(eta_opt$par %*% t(X))) * as.vector( params[[2]] %*% t(X) ) ) 
+                        trt_rule(as.vector(eta_opt$par %*% t(X))) * 
+                        as.vector( params[[2]] %*% t(X) ) ) 
   
   EY_EZ[i,2] <-  hinge(mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) + 
-                               trt_rule(as.vector(eta_opt$par %*% t(X))) * as.vector( params[[4]] %*% t(X) ) ) - grid[i,2])
+                               trt_rule(as.vector(eta_opt$par %*% t(X))) * 
+                               as.vector( params[[4]] %*% t(X) ) ) - grid[i,2])
   
   
 }
