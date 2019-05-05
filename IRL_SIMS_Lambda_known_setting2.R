@@ -41,6 +41,7 @@ show_condition <- function(code) {
   )
 }
 
+
 # Penalty Function and linear decision rule functions:
 
 norm <- function(x) sqrt(sum(x^2))
@@ -63,11 +64,11 @@ clin_eta_opt <- function( eta, X, params_list, M, lambda){
   EY <- mean( params_list[[5]] + as.vector( params_list[[1]] %*% t(X) ) + 
                 trt_rule(etax) * as.vector( params_list[[2]] %*% t(X) ) ) 
   
-  EZ_lambda <-  mean( params_list[[6]] + as.vector( params_list[[3]] %*% t(X) ) + 
+  EZ_lambda <-  mean( params_list[[6]] + as.vector( params_list[[3]] %*% t(X) ) - 
                         trt_rule(etax) * as.vector( params_list[[4]] %*% t(X) ) ) - lambda
   
   # Penalized Value function.
-  V_pen <- EY + M * hinge(EZ_lambda)
+  V_pen <- EY - M * hinge(EZ_lambda)
   
   #print(EY);print(hinge(EZ_lambda));print(V_pen)
   
@@ -82,8 +83,11 @@ VY_est <- function(rule){ mean( QY$coefficients[1] +
 
 VZ_tol_est <- function(rule, tol){
   
-  VZ = mean( QZ$coefficients[1] + as.vector(QZ$coefficients[2:(1+p)] %*% t(X)) + rule*as.vector(QZ$coefficients[-(1:(1+p))] %*% t(X)) )
-  return(VZ - tol)                            
+  VZ = mean( QZ$coefficients[1] + as.vector(QZ$coefficients[2:(1+p)] %*% t(X)) + 
+               rule*as.vector(QZ$coefficients[-(1:(1+p))] %*% t(X)) )
+  VZ_tol <- VZ - tol
+  
+  return(VZ_tol)
 }
 
 # Obtain value function for eta^{opt} estimate.
@@ -98,7 +102,7 @@ value_eta <- function( eta, X, params_list, M, lambda){
                         trt_rule(etax) * as.vector( params_list[[4]] %*% t(X) ) ) - lambda
   
   # Penalized Value function.
-  V_pen <- EY + M * hinge(EZ_lambda)
+  V_pen <- EY - M * hinge(EZ_lambda)
   
   return(V_pen)
 }
@@ -108,22 +112,21 @@ value_eta <- function( eta, X, params_list, M, lambda){
 
 p <- 5
 n <- 2000
-N <- 10000
-sims <- 500
+N <- 100000
 
 #params
 
-theta_0Y <- c(1,0,0,0,1)
-theta_1Y <- c(0.25, 0.25, 0.25, 0, 0)
+theta_0Y <- c(1,0,1,0,1)
+theta_1Y <- c(1, 0.5, 0.5, 1, 1)
 theta_0Z <- c(1,0,1,0,0)
-theta_1Z <- c(1,0,0,2,1)
+theta_1Z <- c(0.25,1,0,0,1)
 
 params <- list(theta_0Y, theta_1Y, theta_0Z, theta_1Z,0,0)
 
 # Generate Covariates Data 
 X <- mvrnorm(n=N, mu=rep(0,p), diag(p) )
 
-#######################
+####################################################################################
 # Generate a reasonable value of lambda
 
 opt_rule1 <- as.vector(params[[2]] %*% t(X))
@@ -136,24 +139,29 @@ sum(trt_rule(opt_rule1) == trt_rule(opt_rule2)) / length(opt_rule1)
 EY <- mean( params[[5]] + as.vector( params[[1]] %*% t(X) ) + 
               trt_rule(opt_rule1) * as.vector( params[[2]] %*% t(X) ) ) 
 
-EZ_optr1 <- mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) + 
+EZ_optr1 <- mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) - 
                     trt_rule(opt_rule1) * as.vector( params[[4]] %*% t(X) ) )
 
-EZ_optr2 <-  mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) + 
+EZ_optr2 <-  mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) - 
                      trt_rule(opt_rule2) * as.vector( params[[4]] %*% t(X) ) )
 
 
 EY
 EZ_optr1
 EZ_optr2
-#######################
 
-########################################################################
+lambda_opt <- -0.5
+
+EZ_optr2 - lambda_opt
+EZ_optr1 - lambda_opt
+#####################################################################################
+
+#####################################################################################
 
 ## Plot all combinations of M and lambda to get a reasonable value for their optimal values.
 
-M <- seq(0.5,5,0.5)
-lambda <- seq(0.1,3,0.1)
+M <- seq(0.1,1,0.1)
+lambda <- lambda_opt #seq(0.1,3,0.1)
 
 grid <- expand.grid(M,lambda)
 V <- rep(0,nrow(grid))
@@ -179,7 +187,7 @@ for(i in 1:nrow(grid)){
   EY_EZ[i,1] <- mean( params[[5]] + as.vector( params[[1]] %*% t(X) ) + 
                         trt_rule(as.vector(eta_opt$par %*% t(X))) * as.vector( params[[2]] %*% t(X) ) ) 
   
-  EY_EZ[i,2] <-  hinge(mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) + 
+  EY_EZ[i,2] <-  hinge(mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) - 
                                trt_rule(as.vector(eta_opt$par %*% t(X))) * as.vector( params[[4]] %*% t(X) ) ) - grid[i,2])
   
   
@@ -191,7 +199,7 @@ gv_df <- as.data.frame(grid_vals)
 
 # Based on scatterplot let M=3.7, lambda=0.2, and V = 0.1164.
 EY_EZ
-M_opt = gv_df[76,1]; lambda_opt = gv_df[76,2]; eta_opt <- eta_opt_mat[76,]
+M_opt = gv_df[5,1]; lambda_opt = gv_df[5,2]; eta_opt <- eta_opt_mat[5,]
 
 #################################################################################
 
@@ -232,7 +240,7 @@ for(sim in 1:num_sims){
   Y <- as.vector( theta_0Y %*% t(X) ) + A * as.vector( theta_1Y %*% t(X) ) + rnorm(n,sd=0.5)
   
   # Risk Outcome
-  Z <- as.vector( theta_0Z %*% t(X) ) + A * as.vector( theta_1Z %*% t(X) ) + rnorm(n,sd=0.5)
+  Z <- as.vector( theta_0Z %*% t(X) ) - A * as.vector( theta_1Z %*% t(X) ) + rnorm(n,sd=0.5)
   
   
   ###################################################################################
@@ -250,17 +258,17 @@ for(sim in 1:num_sims){
   V_Y_clin <-  mean(Y)
   V_Z_clin_tol <- mean(Z) - lambda_est  #EY_EZ[167,2] - lambda_est[i]
   
-  mu_clin <- c( V_Y_clin, hinge(V_Z_clin_tol) )
+  mu_clin <- c( V_Y_clin, -hinge(V_Z_clin_tol) )
   
   # Initialize decision rule
-  lin_rule_coeff <- c(0.5,0,0,1,1)
+  lin_rule_coeff <- c(1,0,0,1,1)
   lin_mod1 <- as.vector(lin_rule_coeff %*% t(X))
   rule1 <- trt_rule(lin_mod1)
   
   VY_learner <- VY_est(rule1)
   VZ_learner <- VZ_tol_est(rule1, lambda_est)
   
-  mu_learner <- c(VY_learner, hinge(VZ_learner) )
+  mu_learner <- c(VY_learner, -hinge(VZ_learner) )
   
   # Begin AL-IRL Algorithm.
   k = 1;eps = 0.00001
@@ -275,27 +283,30 @@ for(sim in 1:num_sims){
   Labels <- c(1,-1)
   L_mu_mat <- cbind(Labels,mu_mat)
   
-  while(k <= 50){
+  while(k <= 20){
     
     q = rep(1,k)
+    
     # QP set up.
     m = length(mu_clin)
-    Dm = diag(m+1) # min ||w||^2
+    Dm = diag(m+1) 
     Dm[nrow(Dm)-2, ncol(Dm)-2] <- Dm[nrow(Dm)-1, ncol(Dm)-1] <- 0.000001
-    #Dm[nrow(Dm), ncol(Dm)] <- 0.000001
+    #Dm[nrow(Dm), ncol(Dm)] <- 1
+    
     dv = rep(0,m+1)
     
     c_m1 <- c(1,1,0)
-    #c_m2 <- rbind(c(1,0,0),c(0,1,0))
+    c_m2 <- rbind(c(1,0,0),c(0,1,0))
     
-    VY_diff <- L_mu_mat[1,2] - L_mu_mat[-1,2]
-    VZ_diff <- L_mu_mat[1,3] - L_mu_mat[-1,3]
-    V_diff <- cbind(VY_diff,VZ_diff,-q)
+    VY_diff <- (L_mu_mat[1,2] - L_mu_mat[-1,2])
+    VZ_diff <- (L_mu_mat[1,3] - L_mu_mat[-1,3])
+    V_diff <- cbind( VY_diff, VZ_diff, q)
     
+    Am <- rbind(c_m1,c_m2, V_diff) 
+    #Am <- rbind(c_m1, V_diff) 
     
-    Am <- rbind(c_m1, V_diff) #,c_m2 )
-    
-    bv <- c(1,rep(0,k))
+    bv <- c(1,0.001,0.001,rep(0,k))
+    #bv <- c(1,rep(0,k))
     sol <- solve.QP(Dm,dv,t(Am),bv,meq=1)
     
     Mk = sol$solution[2]/sol$solution[1]
@@ -313,7 +324,6 @@ for(sim in 1:num_sims){
     eta_func <- function(eta){ value_eta(eta, X=X, params_list = params_est,
                                          M=Mk, lambda = lambda_est) }
     
-  
     eta_opt_k <- show_condition(nmk(par = rep(0,5) , eta_func, control=list(maximize=TRUE))$par)
     if(length(eta_opt_k)==1){
       eta_opt_k <- show_condition(nmk(par = rep(0.01,5) , eta_func, control=list(maximize=TRUE))$par)
@@ -329,25 +339,24 @@ for(sim in 1:num_sims){
     VZ_learner <- VZ_tol_est(rulek, lambda_est)
     
     # Update data
-    mu_learner <- c(VY_learner, hinge(VZ_learner) )
+    mu_learner <- c(VY_learner, -hinge(VZ_learner) )
     L_mu_mat <- rbind(L_mu_mat, c(-1,mu_learner) )
     
     
     #sum(rulek == A)
     # update iteration step.
-    #if(k > 3 & abs(qk)<eps){break}
-    if(k >= 5 & abs(qk) <= eps ){break}
     
+    if(k >= 5 & abs(qk) <= eps ){break}
     
     k = k+1
     
   }
-  if(sim==1){print(Mk)}
+  
   M_est_vec[sim] <- Mk
   eta_mat_lambda[sim,] <-  eta_opt_k
-  V_est_vec[sim] <-  mu_learner[1] + Mk*mu_learner[2]
+  V_est_vec[sim] <-  mu_learner[1] - Mk*mu_learner[2]
   
-  V_clin_vec[sim] <- mu_clin[1] + M_opt*mu_clin[2]
+  V_clin_vec[sim] <- mu_clin[1] - M_opt*mu_clin[2]
   
   VY_est_vec[sim] <- mu_learner[1]
   VZ_est_vec[sim] <- mu_learner[2]
@@ -412,7 +421,7 @@ IRL_list <- list(
   
 )
 
-capture.output(IRL_list, file = "IRL_known_lambda_setting2.txt")
+capture.output(IRL_list, file = "IRL_known_lambda_settings2.txt")
 
 
 
