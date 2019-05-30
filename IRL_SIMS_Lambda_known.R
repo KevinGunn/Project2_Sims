@@ -118,8 +118,8 @@ N <- 100000
 
 theta_0Y <- c(1,0,1,0,1)
 theta_1Y <- c(1, 0.5, 0.5, 1, 1)
-theta_0Z <- c(1,0,1,0,0)
-theta_1Z <- c(0.25,1,0,0,1)
+theta_0Z <- c(0,0,1,1,0)
+theta_1Z <- c(0.25,1,1,0,1)
 
 params <- list(theta_0Y, theta_1Y, theta_0Z, theta_1Z,0,0)
 
@@ -140,17 +140,17 @@ EY <- mean( params[[5]] + as.vector( params[[1]] %*% t(X) ) +
               trt_rule(opt_rule1) * as.vector( params[[2]] %*% t(X) ) ) 
 
 EZ_optr1 <- mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) - 
-                  trt_rule(opt_rule1) * as.vector( params[[4]] %*% t(X) ) )
+                    trt_rule(opt_rule1) * as.vector( params[[4]] %*% t(X) ) )
 
 EZ_optr2 <-  mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) - 
-                      trt_rule(opt_rule2) * as.vector( params[[4]] %*% t(X) ) )
+                     trt_rule(opt_rule2) * as.vector( params[[4]] %*% t(X) ) )
 
-
+# Expected Value Estimates.
 EY
 EZ_optr1
 EZ_optr2
 
-lambda_opt <- -0.5
+lambda_opt <- -0.75
 
 EZ_optr2 - lambda_opt
 EZ_optr1 - lambda_opt
@@ -221,8 +221,11 @@ VZ_est_vec <- rep(0, num_sims )
 VY_clin_vec <- rep(0, num_sims )
 VZ_clin_vec <- rep(0, num_sims )
 
+clin_v_all <- matrix(0,ncol=2,nrow=num_sims)
+
 PCD_vec <- rep(0, num_sims )
 
+#Start sims.
 for(sim in 1:num_sims){
 
   # Generate Covariates Data 
@@ -256,9 +259,11 @@ for(sim in 1:num_sims){
   
   # Clinicians Value function
   V_Y_clin <-  mean(Y)
-  V_Z_clin_tol <- mean(Z) - lambda_est  #EY_EZ[167,2] - lambda_est[i]
+  V_Z_clin_tol <- mean(Z) - lambda_est  
   
   mu_clin <- c( V_Y_clin, -hinge(V_Z_clin_tol) )
+  
+  clin_v_all[sim,] <- mu_clin
   
   # Initialize decision rule
   lin_rule_coeff <- c(1,0,0,1,1)
@@ -275,7 +280,7 @@ for(sim in 1:num_sims){
   
   eta_opt_k <- lin_rule_coeff
   
-  # Create data matrix for svm.
+  # Create data matrix for QP program.
   mu_mat <- rbind(mu_clin, mu_learner)
   colnames(mu_mat) <- c("VY","VZ_tol")
   rownames(mu_mat) <- NULL
@@ -303,10 +308,8 @@ for(sim in 1:num_sims){
     V_diff <- cbind( VY_diff, VZ_diff, q)
     
     Am <- rbind(c_m1,c_m2, V_diff) 
-    #Am <- rbind(c_m1, V_diff) 
     
     bv <- c(1,0.001,0.001,rep(0,k))
-    #bv <- c(1,rep(0,k))
     sol <- solve.QP(Dm,dv,t(Am),bv,meq=1)
     
     Mk = sol$solution[2]/sol$solution[1]
@@ -314,8 +317,8 @@ for(sim in 1:num_sims){
     
     
     # Plot of Value functions.
-    plot(L_mu_mat[,-1],col="blue", pch=19, main="Value Function Estimation",cex=1.2)
-    points(x= L_mu_mat[1,2],y= L_mu_mat[1,3],bg="red",pch=22,cex=1.5) 
+    #plot(L_mu_mat[,-1],col="blue", pch=19, main="Value Function Estimation",cex=1.2)
+    #points(x= L_mu_mat[1,2],y= L_mu_mat[1,3],bg="red",pch=22,cex=1.5) 
     # Hyperplane
     #abline( b=1/Mk , col="green", lty=4)
     
@@ -417,7 +420,9 @@ IRL_list <- list(
   pcd_mean = pcd_mean,
   pcd_sd = pcd_sd,
   PCD_vec = PCD_vec,
-  M_est_vec = M_est_vec
+  M_est_vec = M_est_vec,
+  clin_v_all=clin_v_all,
+  eta_mat_est = eta_mat_lambda
   
 )
 

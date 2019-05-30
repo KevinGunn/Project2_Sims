@@ -200,14 +200,14 @@ gv_df <- as.data.frame(grid_vals)
 # Based on scatterplot let M=3.7, lambda=0.2, and V = 0.1164.
 EY_EZ
 eta_opt_mat
-M_opt = gv_df[5,1]; lambda_opt = gv_df[5,2]; eta_opt <- eta_opt_mat[5,]
+M_opt = gv_df[10,1]; lambda_opt = gv_df[10,2]; eta_opt <- eta_opt_mat[10,]
 
 #################################################################################
 
 opt_rule_eta <- as.vector(eta_opt %*% t(X))
 
 EZ_opt <-  mean( params[[6]] + as.vector( params[[3]] %*% t(X) ) - 
-                     trt_rule(opt_rule_eta) * as.vector( params[[4]] %*% t(X) ) )
+                   trt_rule(opt_rule_eta) * as.vector( params[[4]] %*% t(X) ) )
 
 # Expected Value Estimates.
 EY
@@ -440,7 +440,7 @@ IRL_list <- list(
   
 )
 
-capture.output(IRL_list, file = "IRL_known_lambda_settings2.txt")
+capture.output(IRL_list, file = "IRL_known_lambda_settings3.txt")
 
 
 
