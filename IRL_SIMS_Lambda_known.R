@@ -197,7 +197,7 @@ grid_vals <- cbind(grid,V); colnames(grid_vals) <- c("M","lambda","V")
 gv_df <- as.data.frame(grid_vals)
 
 
-# Based on scatterplot let M=3.7, lambda=0.2, and V = 0.1164.
+# Based on scatterplot let M=0.1
 EY_EZ
 M_opt = gv_df[1,1]; lambda_opt = gv_df[1,2]; eta_opt <- eta_opt_mat[1,]
 
