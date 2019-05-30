@@ -1,4 +1,3 @@
 # Project2_Sims
-All Simulations Performed in R. The code provided adapts apprenticeship learning to the causal inference framework.
-Inverse reinforcement formulated as a quadratic programming problem allows us to learn the clinician's decision to 
-formulate an optimal treatment decision rule.
+All Simulations Performed in R. The code provides an adapted version of apprenticeship learning to the causal inference framework.
+We attempt to approximately learn the clinician's decision rule through inverse reinforcement learning. We formulate a quadratic programming problem to learn the clinician's decision.
