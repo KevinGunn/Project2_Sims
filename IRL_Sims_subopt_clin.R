@@ -237,6 +237,7 @@ VZ_clin_vec <- rep(0, num_sims )
 clin_v_all <- matrix(0,ncol=2,nrow=num_sims)
 
 PCD_vec <- rep(0, num_sims )
+A_vec <- rep(0, num_sims )
 
 for(sim in 1:num_sims){
   
@@ -246,10 +247,13 @@ for(sim in 1:num_sims){
   # 100% Correct decisions
   opt_model <- as.vector(eta_opt %*% t(X))
   
-  clin_model <- opt_model
+  #suboptimal clinical decision
+  eta_sub_opt <- eta_opt + rnorm(5 , 0 , 0.25 )
+  clin_model <- as.vector(eta_sub_opt %*% t(X))
   
   # Treatment
   A <- trt_rule(clin_model)
+  A_true <- trt_rule(opt_model)
   
   # Main Outcome of Interest
   Y <- as.vector( theta_0Y %*% t(X) ) + A * as.vector( theta_1Y %*% t(X) ) + rnorm(n,sd=0.5)
@@ -381,7 +385,8 @@ for(sim in 1:num_sims){
   VY_clin_vec[sim] <- mu_clin[1]
   VZ_clin_vec[sim] <- mu_clin[2]
   
-  PCD_vec[sim] <- sum(rulek==A)/n
+  PCD_vec[sim] <- sum(rulek==A_true)/n
+  A_vec[sim] <- sum(A == A_true) / n
 }
 
 eta_bias <- apply(eta_mat_lambda,2,mean) - eta_opt
@@ -435,12 +440,14 @@ IRL_list <- list(
   pcd_sd = pcd_sd,
   PCD_vec = PCD_vec,
   M_est_vec = M_est_vec,
+  A_mean = mean(A_vec),
+  A_sd = sd(A_vec),
   clin_v_all=clin_v_all,
   eta_mat_est = eta_mat_lambda
   
 )
 
-capture.output(IRL_list, file = "IRL_known_lambda_settings3.txt")
+#capture.output(IRL_list, file = "IRL_known_lambda_settings4.txt")
 
 
 
