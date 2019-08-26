@@ -447,7 +447,7 @@ IRL_list <- list(
   
 )
 
-#capture.output(IRL_list, file = "IRL_known_lambda_settings4.txt")
+capture.output(IRL_list, file = "IRL_known_lambda_settings4.txt")
 
 
 
