@@ -15,6 +15,7 @@ table(HIVnew$Drug)
 library(rgenoud)
 library(glmnet)
 library(mstate)
+library(quadprog)
 
 #####
 # Load data
@@ -38,9 +39,9 @@ coef(fit,s='lambda.min',exact=TRUE)
 
 #############################################################################################
 # function calculating the CIFs
-calc.F<-function(beta,mydata){
+calc.F<-function(eta,mydata){
   pix.hat<-predict(glm(A~ Age+Male+Black+GC+Single+Married+Urban,mydata,family=binomial("logit")),type="response")
-  xb<-cbind(1,mydata$Age,mydata$Black,mydata$GC,mydata$Single,mydata$Married,mydata$Urban,mydata$Male)%*%beta
+  xb<-cbind(1,mydata$Age,mydata$Black,mydata$GC,mydata$Single,mydata$Married,mydata$Urban,mydata$Male)%*%eta
   
   #w.numer<-as.numeric(xb>=0)*mydata$A+as.numeric(xb<0)*(1-mydata$A)
   # smoothed version of weight
@@ -75,25 +76,32 @@ calc.F<-function(beta,mydata){
 
 
 # optim function
-opt.beta1<-function(beta,mydata,tt0){
-  cif.fit<-calc.F(beta,mydata)
-  if(class(cif.fit$F1t0)[1]!="numeric"){F1.tt0<-cif.fit$F1t0(tt0)}else{F1.tt0<-0}
-  if(class(cif.fit$F2t0)[1]!="numeric"){F2.tt0<-cif.fit$F2t0(tt0)}else{F2.tt0<-0}
-  return(F1.tt0)
-}
-
-opt.beta2<-function(beta,mydata,tt0){
-  cif.fit<-calc.F(beta,mydata)
-  if(class(cif.fit$F1t0)[1]!="numeric"){F1.tt0<-cif.fit$F1t0(tt0)}else{F1.tt0<-0}
-  if(class(cif.fit$F2t0)[1]!="numeric"){F2.tt0<-cif.fit$F2t0(tt0)}else{F2.tt0<-0}
-  return(F2.tt0)
-}
-
-opt.beta<-function(beta,mydata,tt0=5,alp=0.1,M=1000){
-  cif.fit<-calc.F(beta,mydata)
+opt.eta<-function(eta,mydata,tt0=5,alp=0.1,M=1000){
+  cif.fit<-calc.F(eta,mydata)
   if(class(cif.fit$F1t0)[1]!="numeric"){F1.tt0<-cif.fit$F1t0(tt0)}else{F1.tt0<-0}
   if(class(cif.fit$F2t0)[1]!="numeric"){F2.tt0<-cif.fit$F2t0(tt0)}else{F2.tt0<-0}
   return(F1.tt0+M*(F2.tt0-alp)*as.numeric(F2.tt0>alp))
+}
+
+# Penalty Function and linear decision rule functions:
+
+norm <- function(x) sqrt(sum(x^2))
+
+hinge <- function(s){ ifelse(s>0,s,0) } 
+
+trt_rule <- function(z){ ifelse(z>0,1,0) }
+
+
+# Clinician's CIF.
+NP_CIF <- function( failtime, status, tt0){
+  
+  #CIF 
+  CIF <- Cuminc( failtime, status )
+  
+  # CIF at time tt0.
+  CIF_tt0 <- CIF[which.min(abs(tt0 - replace(CIF[,1], CIF[,1]>tt0, Inf))),3]
+  
+  return(CIF_tt0)
 }
 
 
@@ -107,35 +115,45 @@ show_condition <- function(code) {
 }
 
 # IRL QP program
-QP_IRL <- function(k.num, tt0, eps, lambda, beta_initial){
+QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
   
   ##########################
   # Empty vectors/matrices to store values from each repetition.
   M_store <- rep(0,k.num)
-  beta_store <- matrix(0,ncol=p,nrow=k.num)
+  p = length(eta0)
+  eta_store <- matrix(0,ncol=p,nrow=k.num)
   #########################
   
   # Clinicians Value function
-  V_Y_clin <-  mean(Y_rc)
-  V_Z_clin_tol <- - (mean(Z_ro) - lambda) 
+  data_r1 <- subset(data, status != 2)
+  CIF_1 <- NP_CIF( data_r1$time, data_r1$status, tt0 = tt0.in )
+  
+  data_r2 <- subset(data, status != 1)
+  CIF_2 <- NP_CIF( data_r2$time, data_r2$status, tt0 = tt0.in )
+  
+  V_Y_clin <-  CIF_1
+  V_Z_clin_tol <- CIF_2 - lambda 
   
   mu_clin <- c( V_Y_clin, -hinge(V_Z_clin_tol) )
   
   # Initialize decision rule
-  lin_rule_coeff <- beta_initial     #c(0.01 , 0 , -0.5 , 0 , 0 , 0) 
-  lin_mod1 <- as.vector(lin_rule_coeff %*% t(X.func))
+  lin_rule_coeff <- eta0     #c(0.01 , 0 , -0.5 , 0 , 0 , 0) 
+  lin_mod1 <- as.vector(lin_rule_coeff %*% t(X))
   rule1 <- trt_rule(lin_mod1)
   
   #rule1
-  print(sum(rule1 == HE_Cohort_Fluid_VP_sub$A))
+  #print(sum(rule1 == data$A))
   
-  VY_learner <-  - VY_est(rule1, X.lm_int)
-  VZ_learner <- VZ_tol_est(rule1, lambda, X.lm_int)
+  # Initial estimated rule
+  CIFs_eta <- calc.F(eta0, data)
   
-  mu_learner <- c(VY_learner, -hinge(VZ_learner) )
+  VY_learner <- CIFs_eta$F1t0(tt0.in)
+  VZ_learner <- CIFs_eta$F2t0(tt0.in)
+  
+  mu_learner <- c( VY_learner, -hinge( VZ_learner - lambda ) )
   
   
-  # Create data matrix for QP program.
+  # Create matrix for QP program.
   mu_mat <- rbind(mu_clin, mu_learner)
   colnames(mu_mat) <- c("VY","VZ_tol")
   rownames(mu_mat) <- NULL
@@ -147,7 +165,7 @@ QP_IRL <- function(k.num, tt0, eps, lambda, beta_initial){
   k=1
   
   # Dimensions of X
-  p_beta <- dim(X.func)[2]
+  p_eta <- dim(X)[2]
   
   while(k <= k.num){
     
@@ -177,6 +195,8 @@ QP_IRL <- function(k.num, tt0, eps, lambda, beta_initial){
     Mk = sol$solution[2]/sol$solution[1]
     qk = sol$solution[3]
     
+    print(Mk)
+    
     # Store M values
     M_store[k] = Mk
     
@@ -187,48 +207,61 @@ QP_IRL <- function(k.num, tt0, eps, lambda, beta_initial){
     #abline( b=1/Mk , col="green", lty=4)
     
     
-    # Obtain estimate of beta^opt.
+    # Obtain estimate of eta^opt.
   
     # Genetic Algorithm approach
     #tt0<-365*4
-    for(j in 1:nrow(beta0)){
-      fit<-try(optim(par=beta0[j,],fn=opt.beta,mydata=mydata,tt0=tt0,alp=alp,M=Mk),silent=TRUE)
+    
+    # real data application
+    npar<-p
+    eta_start<-matrix(0,2*npar,npar)
+    for(i in 1:npar){
+      eta_start[2*i-1,i]<-1
+      eta_start[2*i,i]<--1
+    }
+    
+    fval<-1
+    for(j in 1:nrow(eta_start)){
+      fit<-try(optim(par=eta_start[j,],fn=opt.eta,data=data,tt0=tt0.in,alp=lambda,M=Mk),silent=TRUE)
       if(!is.character(fit)){
-        if(fit$value<f3val){
-          beta3<-fit$par/sqrt(sum(fit$par^2))
-          beta3rec[l,]<-beta3
-          f3val<-fit$value
+        if(fit$value<fval){
+          eta<-fit$par/sqrt(sum(fit$par^2))
+          etarec[l,]<-eta
+          fval<-fit$value
           cat(paste("k=",k,"\n"))
-          print(c(beta3,f3val))
+          print(c(eta,fval))
         }
       }
     }
-    fit<-try(genoud(opt.beta,nvars=npar,max=FALSE,starting.values=fit$par,max.generations=30,print.level=0,mydata=mydata,tt0=tt0,alp=alp,M=Mk),silent=TRUE)
+    fit<-try(genoud(opt.eta,nvars=npar,max=FALSE,starting.values=fit$par,max.generations=30,print.level=0,data=data,tt0=tt0.in,alp=lambda,M=Mk),silent=TRUE)
     if(!is.character(fit)){
-      if(fit$value<f3val){
-        beta3<-fit$par/sqrt(sum(fit$par^2))
-        beta3rec[l,]<-beta3
-        f3val<-fit$value
+      if(fit$value<fval){
+        eta<-fit$par/sqrt(sum(fit$par^2))
+        etarec[l,]<-eta
+        fval<-fit$value
         cat("rgenoud replace\n")
-        print(c(beta3,f3val))
+        print(c(eta,fval))
       }
     }
-    
+    print(eta)
+    eta_k <- eta
     # Store eta values
-    eta_store[k,] <- eta_opt_k
+    eta_store[k,] <- eta_k
     
     # Get decision rule.
-    lin_modk <- as.vector(eta_opt_k %*% t(X.func))
+    lin_modk <- as.vector(eta_k %*% t(X))
     rulek <- trt_rule(lin_modk)
     
-    VY_learner <- - VY_est(rulek,X.func)
-    VZ_learner <- VZ_tol_est(rulek, lambda, X.func)
+    CIFs_eta <- calc.F(eta_k, data)
     
-    # Update data
-    mu_learner <- c(VY_learner, -hinge(VZ_learner) )
+    VY_learner <- CIFs_eta$F1t0(tt0.in)
+    VZ_learner <- CIFs_eta$F2t0(tt0.in)
+    
+    # Update Value functions.
+    mu_learner <- c(VY_learner, -hinge(VZ_learner - lambda) )
     L_mu_mat <- rbind(L_mu_mat, c(-1,mu_learner) )
     
-    print(sum(rulek == HE_Cohort_Fluid_VP_sub$A) / dim(HE_Cohort_Fluid_VP_sub)[1])
+    print(sum(rulek == data$A) / dim(data)[1])
     # update iteration step.
     
     if(k >= 5 & abs(qk) <= eps ){break}
@@ -239,7 +272,7 @@ QP_IRL <- function(k.num, tt0, eps, lambda, beta_initial){
   
   out_list <- list(M_store=M_store, 
                    eta_store = eta_store, 
-                   eta_opt = eta_opt_k,
+                   eta_opt = eta_k,
                    M_est = Mk,
                    eps_k = qk,
                    Value_mat = L_mu_mat,
@@ -255,21 +288,41 @@ QP_IRL <- function(k.num, tt0, eps, lambda, beta_initial){
 
 # real data application
 npar<-8
-beta0<-matrix(0,2*npar,npar)
+eta0<-matrix(0,2*npar,npar)
 for(i in 1:npar){
-  beta0[2*i-1,i]<-1
-  beta0[2*i,i]<--1
+  eta0[2*i-1,i]<-1
+  eta0[2*i,i]<--1
 }
 
+
+# survival time.
+tt0.in <- 365*4
+
+# Looking at cumaltive incidence functions to make sure they work.
 mydata_r1 <- subset(mydata, status != 2)
-CIF_1 <- Cuminc(mydata_r1$time, mydata_r1$status)
+CIF_1 <- NP_CIF( mydata_r1$time, mydata_r1$status, tt0 = tt0.in )
+
 
 mydata_r2 <- subset(mydata, status != 1)
-CIF_2 <- Cuminc(mydata_r2$time, mydata_r2$status)
+CIF_2 <- NP_CIF( mydata_r2$time, mydata_r2$status, tt0 = tt0.in )
 
-CIFs_beta <- calc.F(beta0[1,], mydata)
+CIFs_eta <- calc.F(eta0[1,], mydata)
 
-#CIF for time=300
-CIF_2[which.min(abs(300 - replace(CIF_2[,1], CIF_2[,1]>300, Inf))),3]
-CIFs_beta$F2t0(300)
+
+# Quadratic Programming for AL-IRL.
+
+xvars <- cbind( rep(1, dim(mydata)[1]), mydata[ , c( "Age", "Male", "Black", "GC", "Single", "Married", "Urban" ) ] )
+
+QP_IRL(data=mydata , X = xvars , k.num=20, tt0.in = tt0.in, eps = 0.0001, lambda=0.2, eta0 = eta0[1,])
+
+
+
+
+
+
+
+
+
+
+
 
