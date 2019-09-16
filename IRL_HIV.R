@@ -74,7 +74,6 @@ calc.F<-function(eta,mydata){
   return(list(F1t0=F1.tt0,F2t0=F2.tt0,St0=stepfun(tt,SIt)))
 }
 
-
 # optim function
 opt.eta<-function(eta,mydata,tt0=5,alp=0.1,M=1000){
   cif.fit<-calc.F(eta,mydata)
@@ -98,12 +97,11 @@ NP_CIF <- function( failtime, status, tt0){
   #CIF 
   CIF <- Cuminc( failtime, status )
   
-  # CIF at time tt0.
-  CIF_tt0 <- CIF[which.min(abs(tt0 - replace(CIF[,1], CIF[,1]>tt0, Inf))),3]
+  # CIF for risk 1 and risk 2 at time tt0.
+  CIFs_tt0 <- CIF[which.min(abs(tt0 - replace(CIF[,1], CIF[,1]>tt0, Inf))), c(3,4) ]
   
-  return(CIF_tt0)
+  return( CIFs_tt0 )
 }
-
 
 # Condition handling code to avoid bad starting values in nmk.
 show_condition <- function(code) {
@@ -125,14 +123,10 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
   #########################
   
   # Clinicians Value function
-  data_r1 <- subset(data, status != 2)
-  CIF_1 <- NP_CIF( data_r1$time, data_r1$status, tt0 = tt0.in )
+  CIF_clin <- NP_CIF( data$time, data$status, tt0 = tt0.in )
   
-  data_r2 <- subset(data, status != 1)
-  CIF_2 <- NP_CIF( data_r2$time, data_r2$status, tt0 = tt0.in )
-  
-  V_Y_clin <-  CIF_1
-  V_Z_clin_tol <- CIF_2 - lambda 
+  V_Y_clin <-  as.numeric( CIF_clin[1] )
+  V_Z_clin_tol <- as.numeric( CIF_clin[2] ) - lambda 
   
   mu_clin <- c( V_Y_clin, -hinge(V_Z_clin_tol) )
   
@@ -151,7 +145,6 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
   VZ_learner <- CIFs_eta$F2t0(tt0.in)
   
   mu_learner <- c( VY_learner, -hinge( VZ_learner - lambda ) )
-  
   
   # Create matrix for QP program.
   mu_mat <- rbind(mu_clin, mu_learner)
@@ -195,7 +188,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     Mk = sol$solution[2]/sol$solution[1]
     qk = sol$solution[3]
     
-    print(Mk)
+    print(c("Mk:",Mk))
     
     # Store M values
     M_store[k] = Mk
@@ -216,34 +209,39 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     npar<-p
     eta_start<-matrix(0,2*npar,npar)
     for(i in 1:npar){
-      eta_start[2*i-1,i]<-1
-      eta_start[2*i,i]<--1
+      eta_start[2*i-1,i]<- 1
+      eta_start[2*i,i]<- -1
     }
+    
+    # record results in these matrices in case anything breaks.
+    #numrec<-matrix(nrow=length(alps),ncol=4)
+    #etarec<-matrix(nrow=length(alps),ncol=npar)
+    #fvals<-matrix(nrow=length(alps),ncol=3)
     
     fval<-1
     for(j in 1:nrow(eta_start)){
-      fit<-try(optim(par=eta_start[j,],fn=opt.eta,data=data,tt0=tt0.in,alp=lambda,M=Mk),silent=TRUE)
+      fit<-try(optim(par=eta_start[j,],fn=opt.eta,mydata=data,tt0=tt0.in,alp=lambda,M=Mk),silent=TRUE)
       if(!is.character(fit)){
         if(fit$value<fval){
           eta<-fit$par/sqrt(sum(fit$par^2))
-          etarec[l,]<-eta
+          #etarec[l,]<-eta
           fval<-fit$value
           cat(paste("k=",k,"\n"))
           print(c(eta,fval))
         }
       }
     }
-    fit<-try(genoud(opt.eta,nvars=npar,max=FALSE,starting.values=fit$par,max.generations=30,print.level=0,data=data,tt0=tt0.in,alp=lambda,M=Mk),silent=TRUE)
+    fit<-try(genoud(opt.eta,nvars=npar,max=FALSE,starting.values=fit$par,max.generations=30,print.level=0,mydata=data,tt0=tt0.in,alp=lambda,M=Mk),silent=TRUE)
     if(!is.character(fit)){
       if(fit$value<fval){
         eta<-fit$par/sqrt(sum(fit$par^2))
-        etarec[l,]<-eta
+        #etarec[l,]<-eta
         fval<-fit$value
         cat("rgenoud replace\n")
         print(c(eta,fval))
       }
     }
-    print(eta)
+    #print(eta)
     eta_k <- eta
     # Store eta values
     eta_store[k,] <- eta_k
@@ -261,7 +259,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     mu_learner <- c(VY_learner, -hinge(VZ_learner - lambda) )
     L_mu_mat <- rbind(L_mu_mat, c(-1,mu_learner) )
     
-    print(sum(rulek == data$A) / dim(data)[1])
+    #print(sum(rulek == data$A) / dim(data)[1])
     # update iteration step.
     
     if(k >= 5 & abs(qk) <= eps ){break}
@@ -276,7 +274,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
                    M_est = Mk,
                    eps_k = qk,
                    Value_mat = L_mu_mat,
-                   trt_match = sum(rulek == HE_Cohort_Fluid_VP_sub$A) / dim(HE_Cohort_Fluid_VP_sub)[1],
+                   trt_match = sum(rulek == data$A) / dim(data)[1],
                    decision_rule = rulek
   )
   
@@ -299,22 +297,21 @@ for(i in 1:npar){
 tt0.in <- 365*4
 
 # Looking at cumaltive incidence functions to make sure they work.
-mydata_r1 <- subset(mydata, status != 2)
-CIF_1 <- NP_CIF( mydata_r1$time, mydata_r1$status, tt0 = tt0.in )
-
-
-mydata_r2 <- subset(mydata, status != 1)
-CIF_2 <- NP_CIF( mydata_r2$time, mydata_r2$status, tt0 = tt0.in )
+CIF_clin <- NP_CIF( mydata$time, mydata$status, tt0 = tt0.in )
 
 CIFs_eta <- calc.F(eta0[1,], mydata)
 
-
+######################################################################################
 # Quadratic Programming for AL-IRL.
+
+# survival time.
+tt0.in <- 365*4
 
 xvars <- cbind( rep(1, dim(mydata)[1]), mydata[ , c( "Age", "Male", "Black", "GC", "Single", "Married", "Urban" ) ] )
 
-QP_IRL(data=mydata , X = xvars , k.num=20, tt0.in = tt0.in, eps = 0.0001, lambda=0.2, eta0 = eta0[1,])
+AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=20, tt0.in = tt0.in, eps = 0.0001, lambda=0.4, eta0 = eta0[2,])
 
+AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=20, tt0.in = tt0.in, eps = 0.0001, lambda=0.4, eta0 = eta0[3,])
 
 
 
