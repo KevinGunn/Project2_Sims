@@ -79,7 +79,7 @@ opt.eta<-function(eta,mydata,tt0=5,alp=0.1,M=1000){
   cif.fit<-calc.F(eta,mydata)
   if(class(cif.fit$F1t0)[1]!="numeric"){F1.tt0<-cif.fit$F1t0(tt0)}else{F1.tt0<-0}
   if(class(cif.fit$F2t0)[1]!="numeric"){F2.tt0<-cif.fit$F2t0(tt0)}else{F2.tt0<-0}
-  return(F1.tt0+M*(F2.tt0-alp)*as.numeric(F2.tt0>alp))
+  return( F1.tt0+M*(F2.tt0-alp)*as.numeric(F2.tt0>alp) )
 }
 
 # Penalty Function and linear decision rule functions:
@@ -128,7 +128,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
   V_Y_clin <-  as.numeric( CIF_clin[1] )
   V_Z_clin_tol <- as.numeric( CIF_clin[2] ) - lambda 
   
-  mu_clin <- c( V_Y_clin, -hinge(V_Z_clin_tol) )
+  mu_clin <- c( V_Y_clin, hinge(V_Z_clin_tol) )
   
   # Initialize decision rule
   lin_rule_coeff <- eta0     #c(0.01 , 0 , -0.5 , 0 , 0 , 0) 
@@ -136,7 +136,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
   rule1 <- trt_rule(lin_mod1)
   
   #rule1
-  #print(sum(rule1 == data$A))
+  print(mean(rule1 == data$A))
   
   # Initial estimated rule
   CIFs_eta <- calc.F(eta0, data)
@@ -144,7 +144,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
   VY_learner <- CIFs_eta$F1t0(tt0.in)
   VZ_learner <- CIFs_eta$F2t0(tt0.in)
   
-  mu_learner <- c( VY_learner, -hinge( VZ_learner - lambda ) )
+  mu_learner <- c( VY_learner, hinge( VZ_learner - lambda ) )
   
   # Create matrix for QP program.
   mu_mat <- rbind(mu_clin, mu_learner)
@@ -162,7 +162,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
   
   while(k <= k.num){
     
-    q = rep(1,k)
+    q_coef = 1
     
     # QP set up.
     m = length(mu_clin)
@@ -174,22 +174,22 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     c_m1 <- c(1,1,0)
     c_m2 <- rbind(c(1,0,0),c(0,1,0))
     
-    VY_diff <- (L_mu_mat[1,2] - L_mu_mat[-1,2])
-    VZ_diff <- (L_mu_mat[1,3] - L_mu_mat[-1,3])
-    V_diff <- cbind( VY_diff, VZ_diff, q)
+    VY_diff <- -(L_mu_mat[1,2] - L_mu_mat[k+1,2])
+    VZ_diff <- -(L_mu_mat[1,3] - L_mu_mat[k+1,3])
+    V_diff <- c( VY_diff, VZ_diff, q_coef)
     
     Am <- rbind(c_m1,c_m2, V_diff) 
     
-    bv <- c(1,0.0001,0.0001,rep(0,k))
+    bv <- c(1, 0.00001, 0.00001, 0)
     
     # QP program
     sol <- solve.QP(Dm,dv,t(Am),bv,meq=1)
-    
+    #print(sol)
     Mk = sol$solution[2]/sol$solution[1]
     qk = sol$solution[3]
     
-    print(c("Mk:",Mk))
-    
+    print(c(k,"Mk:",Mk)); print(c(k,"qk:",qk))
+    print(c("weights", sol$solution[1],sol$solution[2]))
     # Store M values
     M_store[k] = Mk
     
@@ -198,7 +198,6 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     points(x= L_mu_mat[1,2],y= L_mu_mat[1,3],bg="red",pch=22,cex=1.5) 
     # Hyperplane
     #abline( b=1/Mk , col="green", lty=4)
-    
     
     # Obtain estimate of eta^opt.
   
@@ -226,29 +225,35 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
           eta<-fit$par/sqrt(sum(fit$par^2))
           #etarec[l,]<-eta
           fval<-fit$value
-          cat(paste("k=",k,"\n"))
+          cat(paste("j=",j,"\n"))
           print(c(eta,fval))
         }
       }
     }
-    fit<-try(genoud(opt.eta,nvars=npar,max=FALSE,starting.values=fit$par,max.generations=30,print.level=0,mydata=data,tt0=tt0.in,alp=lambda,M=Mk),silent=TRUE)
-    if(!is.character(fit)){
-      if(fit$value<fval){
-        eta<-fit$par/sqrt(sum(fit$par^2))
+    
+    #fit<-try(genoud(opt.eta,nvars=npar,max=FALSE,starting.values=fit$par,max.generations=30,print.level=0,mydata=data,tt0=tt0.in,alp=lambda,M=Mk),silent=TRUE)
+    #if(!is.character(fit)){
+    #  if(fit$value<fval){
+    #    eta<-fit$par/sqrt(sum(fit$par^2))
         #etarec[l,]<-eta
-        fval<-fit$value
-        cat("rgenoud replace\n")
-        print(c(eta,fval))
-      }
-    }
-    #print(eta)
+    #    fval<-fit$value
+    #    cat("rgenoud replace\n")
+    #    print(c(eta,fval))
+    #  }
+    #}
+    
+    
     eta_k <- eta
+    print(eta_k)
     # Store eta values
     eta_store[k,] <- eta_k
     
     # Get decision rule.
     lin_modk <- as.vector(eta_k %*% t(X))
+    #print(lin_modk)
     rulek <- trt_rule(lin_modk)
+    
+    print( c("rule_k",mean(rulek == data$A)) )
     
     CIFs_eta <- calc.F(eta_k, data)
     
@@ -256,7 +261,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     VZ_learner <- CIFs_eta$F2t0(tt0.in)
     
     # Update Value functions.
-    mu_learner <- c(VY_learner, -hinge(VZ_learner - lambda) )
+    mu_learner <- c(VY_learner, hinge(VZ_learner - lambda) )
     L_mu_mat <- rbind(L_mu_mat, c(-1,mu_learner) )
     
     #print(sum(rulek == data$A) / dim(data)[1])
@@ -305,21 +310,44 @@ CIFs_eta <- calc.F(eta0[1,], mydata)
 # Quadratic Programming for AL-IRL.
 
 # survival time.
-tt0.in <- 365*4
+tt0.in <- 365
 
 xvars <- cbind( rep(1, dim(mydata)[1]), mydata[ , c( "Age", "Male", "Black", "GC", "Single", "Married", "Urban" ) ] )
 
-AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=20, tt0.in = tt0.in, eps = 0.0001, lambda=0.4, eta0 = eta0[2,])
+# Different etas
+AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[2,] )
 
-AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=20, tt0.in = tt0.in, eps = 0.0001, lambda=0.4, eta0 = eta0[3,])
-
-
-
+AL_HIV2 <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[6,] )
 
 
+#########################################################################################
 
 
+fval<-1
+for(j in 1:nrow(eta0)){
+  fit<-try(optim(par=eta0[j,],fn=opt.eta,mydata=mydata,tt0=tt0.in,alp=0,M=1000),silent=TRUE)
+  if(!is.character(fit)){
+    if(fit$value<fval){
+      eta<-fit$par/sqrt(sum(fit$par^2))
+      #etarec[l,]<-eta
+      fval<-fit$value
+      cat(paste("j=",j,"\n"))
+      print(c(eta,fval))
+    }
+  }
+}
 
 
+# Compare with large M.
+cat("M:", 1000, "eta:", eta)
+
+M1000_rule <- trt_rule(eta %*% t(xvars))
+
+cat("M:", AL_HIV$M_est , "eta:", AL_HIV$eta_opt)
+
+M1_rule <- trt_rule(AL_HIV$eta_opt %*% t(xvars))
+
+sum(M1000_rule == mydata$A)
+sum(M1_rule == mydata$A)
 
 
