@@ -162,7 +162,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
   
   while(k <= k.num){
     
-    q_coef = 1
+    q_coef = rep(1,k)
     
     # QP set up.
     m = length(mu_clin)
@@ -174,13 +174,13 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     c_m1 <- c(1,1,0)
     c_m2 <- rbind(c(1,0,0),c(0,1,0))
     
-    VY_diff <- -(L_mu_mat[1,2] - L_mu_mat[k+1,2])
-    VZ_diff <- -(L_mu_mat[1,3] - L_mu_mat[k+1,3])
-    V_diff <- c( VY_diff, VZ_diff, q_coef)
+    VY_diff <- -(L_mu_mat[1,2] - L_mu_mat[-1,2])
+    VZ_diff <- -(L_mu_mat[1,3] - L_mu_mat[-1,3])
+    V_diff <- cbind( VY_diff, VZ_diff, q_coef)
     
     Am <- rbind(c_m1,c_m2, V_diff) 
     
-    bv <- c(1, 0.00001, 0.00001, 0)
+    bv <- c(1, 0.00001, 0.00001, rep(0,k))
     
     # QP program
     sol <- solve.QP(Dm,dv,t(Am),bv,meq=1)
