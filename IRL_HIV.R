@@ -174,8 +174,8 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     c_m1 <- c(1,1,0)
     c_m2 <- rbind(c(1,0,0),c(0,1,0))
     
-    VY_diff <- -(L_mu_mat[1,2] - L_mu_mat[-1,2])
-    VZ_diff <- -(L_mu_mat[1,3] - L_mu_mat[-1,3])
+    VY_diff <- (L_mu_mat[-1,2] - L_mu_mat[1,2] )
+    VZ_diff <- (L_mu_mat[-1,3] - L_mu_mat[1,3] )
     V_diff <- cbind( VY_diff, VZ_diff, q_coef)
     
     Am <- rbind(c_m1,c_m2, V_diff) 
@@ -250,7 +250,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     
     # Get decision rule.
     lin_modk <- as.vector(eta_k %*% t(X))
-    #print(lin_modk)
+    print(lin_modk)
     rulek <- trt_rule(lin_modk)
     
     print( c("rule_k",mean(rulek == data$A)) )
@@ -315,9 +315,9 @@ tt0.in <- 365
 xvars <- cbind( rep(1, dim(mydata)[1]), mydata[ , c( "Age", "Male", "Black", "GC", "Single", "Married", "Urban" ) ] )
 
 # Different etas
-AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[2,] )
+AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=50, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[2,] )
 
-AL_HIV2 <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[6,] )
+AL_HIV2 <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[7,] )
 
 
 #########################################################################################
