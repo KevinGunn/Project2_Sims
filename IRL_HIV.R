@@ -41,6 +41,7 @@ coef(fit,s='lambda.min',exact=TRUE)
 # function calculating the CIFs
 calc.F<-function(eta,mydata){
   pix.hat<-predict(glm(A~ Age+Male+Black+GC+Single+Married+Urban,mydata,family=binomial("logit")),type="response")
+  #pix.hat<-predict(glm(A~ Age+Black+GC+Single,mydata,family=binomial("logit")),type="response")
   #print(pix.hat)
   xb<-cbind(1,mydata$Age,mydata$Black,mydata$GC,mydata$Single,mydata$Married,mydata$Urban,mydata$Male)%*%eta
   
@@ -323,71 +324,35 @@ AL_HIV2 <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.0
 
 #########################################################################################
 
-# function calculating the CIFs
-calc.F2<-function(eta,mydata){
-  pix.hat<-predict(glm(A~ Age+Male+Black+GC+Single+Married+Urban,mydata,family=binomial("logit")),type="response")
-  #print(pix.hat)
-  xb<-cbind(1,mydata$Age,mydata$Black,mydata$GC,mydata$Single,mydata$Married,mydata$Urban,mydata$Male)%*%eta
-  
-  #w.numer<-as.numeric(xb>=0)*mydata$A+as.numeric(xb<0)*(1-mydata$A)
-  # smoothed version of weight
-  n<-nrow(mydata)
-  h<-sd(xb)*(n/4)^(-1/3)
-  w.numer<-pnorm(xb/h)*mydata$A+(1-pnorm(xb/h))*(1-mydata$A)
-  w.denom<-pix.hat*mydata$A+(1-pix.hat)*(1-mydata$A)
-  wi<-w.numer/w.denom
-  
-  ord.t0<-sort(mydata$time)
-  ord.d0<-as.numeric(mydata$status>0)[order(mydata$time)]
-  ord.ebs<-mydata$status[order(mydata$time)]
-  ord.wi<-wi[order(mydata$time)]
-  
-  tt<-ord.t0[ord.d0==1]
-  SIt<-numeric()
-  SIt[1]<-1
-  for(k in 1:length(tt)){
-    SIt[k+1]<-SIt[k]*(1-sum(ord.wi[ord.t0==tt[k]])/sum(ord.wi[ord.t0>=tt[k]]))
-  }
-  
-  tt1<-ord.t0[ord.ebs==1]
-  tt2<-ord.t0[ord.ebs==2]
-  lamb1<-lamb2<-numeric()
-  for(k in 1:length(tt1)) lamb1[k]<-sum(ord.wi[ord.t0==tt1[k]])/sum(ord.wi[ord.t0>=tt1[k]])
-  for(k in 1:length(tt2)) lamb2[k]<-sum(ord.wi[ord.t0==tt2[k]])/sum(ord.wi[ord.t0>=tt2[k]])
-  
-  if(length(tt1)>0){ F1.tt0<-stepfun(tt1,cumsum(c(0,stepfun(tt,SIt)(tt1)*lamb1)))}else{F1.tt0<-0}
-  if(length(tt2)>0){ F2.tt0<-stepfun(tt2,cumsum(c(0,stepfun(tt,SIt)(tt2)*lamb2)))}else{F2.tt0<-0}
-  return(list(F1t0=F1.tt0,F2t0=F2.tt0,St0=stepfun(tt,SIt)))
-}
-
-# optim function
-opt.eta2<-function(eta,mydata,tt0=5,alp=0.1,M=1000){
-  cif.fit<-calc.F2(eta,mydata)
-  if(class(cif.fit$F1t0)[1]!="numeric"){F1.tt0<-cif.fit$F1t0(tt0)}else{F1.tt0<-0}
-  if(class(cif.fit$F2t0)[1]!="numeric"){F2.tt0<-cif.fit$F2t0(tt0)}else{F2.tt0<-0}
-  return( F1.tt0+M*(F2.tt0-alp)*as.numeric(F2.tt0>alp) )
-}
-
-
 fval<-1000
 for(j in 1:nrow(eta0)){
-  fit<-try(optim(par=eta0[j,],fn=opt.eta2,mydata=mydata,tt0=tt0.in,alp=0,M=1000),silent=TRUE)
+  fit<-try(optim(par=eta0[j,],fn=opt.eta,mydata=mydata,tt0=tt0.in,alp=0,M=1000),silent=TRUE)
   if(!is.character(fit)){
     if(fit$value<fval){
-      eta<-fit$par/sqrt(sum(fit$par^2))
+      eta_opt<-fit$par/sqrt(sum(fit$par^2))
       #etarec[l,]<-eta
       fval<-fit$value
       cat(paste("j=",j,"\n"))
-      print(c(eta,fval))
+      print(c(eta_opt,fval))
     }
   }
 }
 
+# Value functions for RL algorithm with M=1000.
+CIFs_opt <- calc.F(eta=eta_opt, mydata)
+CIFs_opt$F1t0(tt0.in)
+CIFs_opt$F2t0(tt0.in)
+
+# Value functions for IRL algorithm with estimated M.
+CIFs_IRL <- calc.F(eta=AL_HIV$eta_opt, mydata)
+CIFs_IRL$F1t0(tt0.in)
+CIFs_IRL$F2t0(tt0.in)
+
 
 # Compare with large M.
-cat("M:", 1000, "eta:", eta)
+cat("M:", 1000, "eta:", eta_opt)
 
-M1000_rule <- trt_rule(eta %*% t(xvars))
+M1000_rule <- trt_rule(eta_opt %*% t(xvars))
 
 cat("M:", AL_HIV$M_est , "eta:", AL_HIV$eta_opt)
 
