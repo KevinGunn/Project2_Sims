@@ -196,8 +196,11 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     M_store[k] = Mk
     
     # Plot of Value functions.
-    plot(L_mu_mat[,-1],col="blue", pch=19, main="Value Function Estimation",cex=1.2)
+    plot(L_mu_mat[-1,-1],col="blue", pch=19, main="Value Function Estimation",
+         xlab="Risk 1", ylab = "Risk 2", cex=1.2) #, ylim = c(0.29,0.39), xlim = c(0.22,0.38))
     points(x= L_mu_mat[1,2],y= L_mu_mat[1,3],bg="red",pch=22,cex=1.5) 
+    text(L_mu_mat[-1,-1], labels = seq(from=1, to = k) , pos = 4 )
+    text(x = L_mu_mat[1,2], y= L_mu_mat[1,3], labels = "Clinicians" , pos = 1 )
     # Hyperplane
     #abline( b=1/Mk , col="green", lty=4)
     
