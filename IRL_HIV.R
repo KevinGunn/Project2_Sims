@@ -315,21 +315,21 @@ CIFs_eta <- calc.F(eta0[1,], mydata)
 # Quadratic Programming for AL-IRL.
 
 # survival time.
-tt0.in <- 365
+tt0.in <- 730
 
 xvars <- cbind( rep(1, dim(mydata)[1]), mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ] )
 
 # Different etas
-AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=50, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[2,] )
+AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=50, tt0.in = tt0.in, eps = 0.00001, lambda=0.4, eta0 = eta0[2,] )
 
-AL_HIV2 <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[7,] )
+#AL_HIV2 <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[7,] )
 
 
 #########################################################################################
 
 fval<-1000
 for(j in 1:nrow(eta0)){
-  fit<-try(optim(par=eta0[j,],fn=opt.eta,mydata=mydata,tt0=tt0.in,alp=0,M=1000),silent=TRUE)
+  fit<-try(optim(par=eta0[j,],fn=opt.eta,mydata=mydata,tt0=tt0.in,alp=0.4,M=1000),silent=TRUE)
   if(!is.character(fit)){
     if(fit$value<fval){
       eta_opt<-fit$par/sqrt(sum(fit$par^2))
