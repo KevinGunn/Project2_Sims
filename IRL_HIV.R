@@ -407,7 +407,7 @@ Plot_mat <- data.frame(F1.subj, F2.subj, trt_match)
 
 # Plot of value functions and treatment
 ggplot(Plot_mat, aes(x=F1.subj, y=F2.subj, shape=trt_match, color=trt_match)) +
-  geom_point() + xlab("CIF for Risk 1") + ylab("CIF for Risk 2") + ggtitle("One Year (t = 365)")
+  geom_point() + xlab("CIF for Risk 1") + ylab("CIF for Risk 2") + ggtitle("One Year (t = 365)") +
   labs(color = "Treatment Agreement", shape = "Treatment Agreement")
 
 
