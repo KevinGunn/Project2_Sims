@@ -16,7 +16,8 @@ library(rgenoud)
 library(glmnet)
 library(mstate)
 library(quadprog)
-
+library(cmprsk)
+library(ggplot2)
 #####
 # Load data
 mydata<-data.frame(time=HIVnew$FUtime,status=HIVnew$event,A=as.numeric(HIVnew$Drug=="NNRTIs+NRTIs"),CD4BL=HIVnew$CD4_BL,VLDBL=HIVnew$VLD_BL,ABNBL=HIVnew$ABNBL,
@@ -373,17 +374,43 @@ mean(M1000_rule == MIRL_rule)
 ## Plot Individual Value Functions of Risk 1 and Risk 2 with treatment agreement.
 #############################################################################################
 
-library(cmprsk)
-
 xvars.crr <- cbind( mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ],
                     mydata$A, mydata$A*mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ] )
 
 colnames(xvars.crr) <- c("Age", "Black", "GC", "Single", "Married", "Urban", "Male", "A",
                          "A*Age", "A*Black", "A*GC", "A*Single", "A*Married", "A*Urban", "A*Male")
 
-CIF_x <- crr(ftime = mydata$time, fstatus = mydata$status, cov1 = xvars.crr )
 
-predict(CIF_x, cov1 = xvars.crr[1,])
+# Calculate CIF for subjects in study.
+CIF_subject <- function(ftime, fstatus, cov1, tt0, failcode, cencode ){
+  CIF_x <- crr(ftime = ftime, fstatus = fstatus, cov1 = cov1, failcode = failcode, cencode = cencode )
+  
+  num_sub <- dim(cov1)[1]
+  CIF_sub.tt0 <- rep(0,num_sub)
+  
+  for(i in 1:num_sub){
+    
+    CIF.p <- predict(CIF_x, cov1 = xvars.crr[i,])
+    # CIF for risk 1 and risk 2 at time tt0.
+    CIF_sub.tt0[i] <- CIF.p[which.min(abs(tt0 - replace(CIF.p[,1], CIF.p[,1]>tt0, Inf))), 2 ]
+  
+  }
+    
+    return( CIF_sub.tt0 )
+}
+
+F1.subj <- CIF_subject( mydata$time, mydata$status, xvars.crr, tt0.in, 1, 0 )
+F2.subj <- CIF_subject( mydata$time, mydata$status, xvars.crr, tt0.in, 2, 0 )
+trt_match <- mydata$A == AL_HIV$decision_rule
+
+Plot_mat <- data.frame(F1.subj, F2.subj, trt_match)
+
+# Plot of value functions and treatment
+ggplot(Plot_mat, aes(x=F1.subj, y=F2.subj, shape=trt_match, color=trt_match)) +
+  geom_point() + xlab("Risk 1") + ylab("Risk 2") + labs(color = "Treatment Agreement", shape = "Treatment Agreement")
+
+
+
 
 
 
