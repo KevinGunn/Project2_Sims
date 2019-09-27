@@ -231,7 +231,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
           #etarec[l,]<-eta
           fval<-fit$value
           cat(paste("j=",j,"\n"))
-          print(c(eta,fval))
+          #print(c(eta,fval))
         }
       }
     }
@@ -249,7 +249,7 @@ QP_IRL <- function(data, X, k.num, tt0.in, eps, lambda, eta0){
     
     
     eta_k <- eta
-    print(eta_k)
+    #print(eta_k)
     # Store eta values
     eta_store[k,] <- eta_k
     
@@ -304,7 +304,7 @@ for(i in 1:npar){
 
 
 # survival time.
-tt0.in <- 365*4
+tt0.in <- 365*2
 
 # Looking at cumaltive incidence functions to make sure they work.
 CIF_clin <- NP_CIF( mydata$time, mydata$status, tt0 = tt0.in )
@@ -315,18 +315,19 @@ CIFs_eta <- calc.F(eta0[1,], mydata)
 # Quadratic Programming for AL-IRL.
 
 # survival time.
-tt0.in <- 730
+tt0.in <- 365
 
 xvars <- cbind( rep(1, dim(mydata)[1]), mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ] )
 
 # Different etas
-AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=50, tt0.in = tt0.in, eps = 0.00001, lambda=0.4, eta0 = eta0[2,] )
+AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=50, tt0.in = tt0.in, eps = 0.00001, lambda=0.2, eta0 = eta0[2,] )
 
 #AL_HIV2 <- QP_IRL(data=mydata , X = xvars , k.num=10, tt0.in = tt0.in, eps = 0.00001, lambda=0, eta0 = eta0[7,] )
 
 
 #########################################################################################
-
+## RL algorithm
+#########################################################################################
 fval<-1000
 for(j in 1:nrow(eta0)){
   fit<-try(optim(par=eta0[j,],fn=opt.eta,mydata=mydata,tt0=tt0.in,alp=0.4,M=1000),silent=TRUE)
@@ -341,6 +342,9 @@ for(j in 1:nrow(eta0)){
   }
 }
 
+###########################################################################################
+## Compare RL vs IRL
+###########################################################################################
 # Value functions for RL algorithm with M=1000.
 CIFs_opt <- calc.F(eta=eta_opt, mydata)
 CIFs_opt$F1t0(tt0.in)
@@ -364,4 +368,23 @@ MIRL_rule <- trt_rule(AL_HIV$eta_opt %*% t(xvars))
 mean(M1000_rule == mydata$A)
 mean(MIRL_rule == mydata$A)
 mean(M1000_rule == MIRL_rule)
+
+#############################################################################################
+## Plot Individual Value Functions of Risk 1 and Risk 2 with treatment agreement.
+#############################################################################################
+
+library(cmprsk)
+
+xvars.crr <- cbind( mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ],
+                    mydata$A, mydata$A*mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ] )
+
+colnames(xvars.crr) <- c("Age", "Black", "GC", "Single", "Married", "Urban", "Male", "A",
+                         "A*Age", "A*Black", "A*GC", "A*Single", "A*Married", "A*Urban", "A*Male")
+
+CIF_x <- crr(ftime = mydata$time, fstatus = mydata$status, cov1 = xvars.crr )
+
+predict(CIF_x, cov1 = xvars.crr[1,])
+
+
+
 
