@@ -18,6 +18,7 @@ library(mstate)
 library(quadprog)
 library(cmprsk)
 library(ggplot2)
+library(gridExtra)
 #####
 # Load data
 mydata<-data.frame(time=HIVnew$FUtime,status=HIVnew$event,A=as.numeric(HIVnew$Drug=="NNRTIs+NRTIs"),CD4BL=HIVnew$CD4_BL,VLDBL=HIVnew$VLD_BL,ABNBL=HIVnew$ABNBL,
@@ -303,20 +304,10 @@ for(i in 1:npar){
   eta0[2*i,i]<--1
 }
 
-
-# survival time.
-tt0.in <- 365*2
-
-# Looking at cumaltive incidence functions to make sure they work.
-CIF_clin <- NP_CIF( mydata$time, mydata$status, tt0 = tt0.in )
-
-CIFs_eta <- calc.F(eta0[1,], mydata)
-
-######################################################################################
 # Quadratic Programming for AL-IRL.
 
 # survival time.
-tt0.in <- 365
+tt0.in <- 365*4
 
 xvars <- cbind( rep(1, dim(mydata)[1]), mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ] )
 
@@ -331,7 +322,7 @@ AL_HIV <- QP_IRL(data=mydata , X = xvars , k.num=50, tt0.in = tt0.in, eps = 0.00
 #########################################################################################
 fval<-1000
 for(j in 1:nrow(eta0)){
-  fit<-try(optim(par=eta0[j,],fn=opt.eta,mydata=mydata,tt0=tt0.in,alp=0.4,M=1000),silent=TRUE)
+  fit<-try(optim(par=eta0[j,],fn=opt.eta,mydata=mydata,tt0=tt0.in,alp=0.2,M=1000),silent=TRUE)
   if(!is.character(fit)){
     if(fit$value<fval){
       eta_opt<-fit$par/sqrt(sum(fit$par^2))
@@ -390,8 +381,8 @@ CIF_subject <- function(ftime, fstatus, cov1, tt0, failcode, cencode ){
   
   for(i in 1:num_sub){
     
-    CIF.p <- predict(CIF_x, cov1 = xvars.crr[i,])
-    # CIF for risk 1 and risk 2 at time tt0.
+    CIF.p <- predict(CIF_x, cov1 = cov1)
+    # CIF for risk 1 or risk 2 at time tt0.
     CIF_sub.tt0[i] <- CIF.p[which.min(abs(tt0 - replace(CIF.p[,1], CIF.p[,1]>tt0, Inf))), 2 ]
   
   }
@@ -399,21 +390,79 @@ CIF_subject <- function(ftime, fstatus, cov1, tt0, failcode, cencode ){
     return( CIF_sub.tt0 )
 }
 
-F1.subj <- CIF_subject( mydata$time, mydata$status, xvars.crr, tt0.in, 1, 0 )
+F1.subj <- CIF_subject( mydata$time, mydata$time, xvars.crr, tt0.in, 1, 0 )
 F2.subj <- CIF_subject( mydata$time, mydata$status, xvars.crr, tt0.in, 2, 0 )
 trt_match <- mydata$A == AL_HIV$decision_rule
 
 Plot_mat <- data.frame(F1.subj, F2.subj, trt_match)
 
 # Plot of value functions and treatment
-ggplot(Plot_mat, aes(x=F1.subj, y=F2.subj, shape=trt_match, color=trt_match)) +
-  geom_point() + xlab("CIF for Risk 1") + ylab("CIF for Risk 2") + ggtitle("One Year (t = 365)") +
+p_1460 <- ggplot(Plot_mat, aes(x=F1.subj, y=F2.subj, shape=trt_match, color=trt_match)) +
+  geom_point() + xlab("CIF for Risk 1") + ylab("CIF for Risk 2") + ggtitle("Four Years (t = 1460)") +
   labs(color = "Treatment Agreement", shape = "Treatment Agreement")
 
 
+p_365
+p_730
+p_1095 
+p_1460
 
+grid.arrange(p_365, p_730, p_1095, p_1460, ncol=2)
 
+###########################################################################################################
+## Plot Value difference for treatment 1 and treatment 0
+###########################################################################################################
 
+# Calculate CIF for subjects in study.
+CIF_subject_diff <- function( trt1.x, trt0.x, tt0, fcode, ccode ){
+  
+  # Fit CIF
+  CIF_x <- crr(ftime = mydata$time, fstatus = mydata$status, cov1 = xvars.crr, failcode = fcode, 
+              cencode = ccode )
+  
+  num_sub <- dim(trt1.x)[1]
+  CIFA1.tt0 <- rep(0,num_sub)
+  CIFA0.tt0 <- rep(0,num_sub)
+  
+  for(i in 1:num_sub){
+    
+    CIF.p1 <- predict(CIF_x, cov1 = trt1.x[i,])
+    CIF.p0 <- predict(CIF_x, cov1 = trt0.x[i,])
+    
+    # CIF treatment 1.
+    CIFA1.tt0[i] <- CIF.p1[which.min(abs(tt0 - replace(CIF.p1[,1], CIF.p1[,1]>tt0, Inf))), 2 ]
+    # CIF treatment 0.
+    CIFA0.tt0[i] <- CIF.p0[which.min(abs(tt0 - replace(CIF.p0[,1], CIF.p0[,1]>tt0, Inf))), 2 ]
+    
+  }
+  
+  CIF_pred.tt0 <- cbind(CIFA1.tt0, CIFA0.tt0, CIFA1.tt0 - CIFA0.tt0 )
+  colnames(CIF_pred.tt0) <- c("trt1","trt0","diff")
+  
+  return( CIF_pred.tt0 )
+}
+
+num_subj <- dim(xvars.crr)[1]
+xvars.trt1 <- cbind( mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ],
+                    rep(1,num_subj), 1*mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ] )
+
+xvars.trt0 <- cbind( mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ],
+                     rep(0,num_subj), 0*mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ] )
+
+colnames(xvars.trt0) <- colnames(xvars.trt1) <- c("Age", "Black", "GC", "Single", "Married", "Urban", "Male", "A",
+                         "A*Age", "A*Black", "A*GC", "A*Single", "A*Married", "A*Urban", "A*Male")
+
+r1.diff <- CIF_subject_diff( trt1.x=xvars.trt1, trt0.x=xvars.trt0, tt0.in, fcode=1,ccode=0)
+r2.diff <- CIF_subject_diff( xvars.trt1, xvars.trt0, tt0.in, fcode=2, ccode=0)
+
+# Create scatterplots.
+trt_match <- mydata$A == AL_HIV$decision_rule
+
+Plot_mat2 <- data.frame(r1.diff=r1.diff[,3], r2.diff = r2.diff[,3], trt_match)
+
+ggplot(Plot_mat2, aes(x=r1.diff, y=r2.diff, shape=trt_match, color=trt_match)) +
+  geom_point() + xlab("CIF difference for Risk 1") + ylab("CIF difference for Risk 2") + ggtitle("One Year (t = 365)") +
+  labs(color = "Treatment Agreement", shape = "Treatment Agreement")
 
 
 
