@@ -17,6 +17,7 @@ library(glmnet)
 library(mstate)
 library(quadprog)
 library(cmprsk)
+library(nloptr)
 library(ggplot2)
 library(gridExtra)
 #####
@@ -307,7 +308,7 @@ for(i in 1:npar){
 # Quadratic Programming for AL-IRL.
 
 # survival time.
-tt0.in <- 365*4
+tt0.in <- 365
 
 xvars <- cbind( rep(1, dim(mydata)[1]), mydata[ , c( "Age", "Black", "GC", "Single", "Married", "Urban", "Male" ) ] )
 
@@ -381,7 +382,8 @@ CIF_subject <- function(ftime, fstatus, cov1, tt0, failcode, cencode ){
   
   for(i in 1:num_sub){
     
-    CIF.p <- predict(CIF_x, cov1 = cov1)
+    CIF.p <- predict(CIF_x, cov1 = cov1[i,])
+    #print(CIF.p)
     # CIF for risk 1 or risk 2 at time tt0.
     CIF_sub.tt0[i] <- CIF.p[which.min(abs(tt0 - replace(CIF.p[,1], CIF.p[,1]>tt0, Inf))), 2 ]
   
@@ -390,17 +392,16 @@ CIF_subject <- function(ftime, fstatus, cov1, tt0, failcode, cencode ){
     return( CIF_sub.tt0 )
 }
 
-F1.subj <- CIF_subject( mydata$time, mydata$time, xvars.crr, tt0.in, 1, 0 )
-F2.subj <- CIF_subject( mydata$time, mydata$status, xvars.crr, tt0.in, 2, 0 )
+F1.subj <- CIF_subject( mydata$time, mydata$status, xvars.crr, tt0.in, failcode = 1, cencode = 0 )
+F2.subj <- CIF_subject( mydata$time, mydata$status, xvars.crr, tt0.in, failcode = 2, cencode = 0 )
 trt_match <- mydata$A == AL_HIV$decision_rule
 
-Plot_mat <- data.frame(F1.subj, F2.subj, trt_match)
+Plot_mat <- data.frame(F1.subj, F2.subj, trt_match, mydata$A)
 
 # Plot of value functions and treatment
-p_1460 <- ggplot(Plot_mat, aes(x=F1.subj, y=F2.subj, shape=trt_match, color=trt_match)) +
+p_365 <- ggplot(Plot_mat, aes(x=F1.subj, y=F2.subj, shape=trt_match, color=trt_match)) +
   geom_point() + xlab("CIF for Risk 1") + ylab("CIF for Risk 2") + ggtitle("Four Years (t = 1460)") +
   labs(color = "Treatment Agreement", shape = "Treatment Agreement")
-
 
 p_365
 p_730
@@ -458,11 +459,74 @@ r2.diff <- CIF_subject_diff( xvars.trt1, xvars.trt0, tt0.in, fcode=2, ccode=0)
 # Create scatterplots.
 trt_match <- mydata$A == AL_HIV$decision_rule
 
-Plot_mat2 <- data.frame(r1.diff=r1.diff[,3], r2.diff = r2.diff[,3], trt_match)
+Plot_mat2 <- data.frame(r1.diff=r1.diff[,3], r2.diff = r2.diff[,3], trt_match, mydata$A)
 
-ggplot(Plot_mat2, aes(x=r1.diff, y=r2.diff, shape=trt_match, color=trt_match)) +
+V_diff_p365 <- ggplot(Plot_mat2, aes(x=r1.diff, y=r2.diff, shape=trt_match, color=trt_match)) +
   geom_point() + xlab("CIF difference for Risk 1") + ylab("CIF difference for Risk 2") + ggtitle("One Year (t = 365)") +
   labs(color = "Treatment Agreement", shape = "Treatment Agreement")
 
+V_diff_p365
+V_diff_p730
+V_diff_p1095
+V_diff_p1460
 
+grid.arrange(V_diff_p365,V_diff_p730,V_diff_p1095, V_diff_p1460, ncol=2)
 
+#############################################################################################################
+
+# Histograms
+head(mydata)
+
+hd <- cbind(mydata,trt_match)
+mydata2 <- apply(mydata[8:13],2,as.factor)
+hd2 <- as.data.frame( cbind(mydata2, trt_match ) )
+  
+# Age
+age.p <- ggplot(hd, aes(x=Age, fill=trt_match, colour=trt_match)) +
+  geom_histogram(alpha = 0.5, bins=15) +  
+  labs(colour = "Treatment Agreement", fill = "Treatment Agreement")
+
+# Male
+male.p <- ggplot(hd2, aes(x=Male, fill=trt_match, colour=trt_match)) +
+  geom_bar(width = 0.25) + 
+  scale_x_discrete( breaks=c(0, 1), labels=c("Female", "Male") ) +
+  labs(colour = "Treatment Agreement", fill = "Treatment Agreement" ) +
+  xlab("Gender")
+
+# Race  
+race.p <- ggplot(hd2, aes(x=Black, fill=trt_match, colour=trt_match)) +
+  geom_bar(width = 0.25) + 
+  scale_x_discrete( breaks=c(0, 1), labels=c("Other", "Black") ) +
+  labs(colour = "Treatment Agreement", fill = "Treatment Agreement" ) +
+  xlab("Race")
+
+# GC
+gc.p <-ggplot(hd2, aes(x=GC, fill=trt_match, colour=trt_match)) +
+  geom_bar(width = 0.25) + 
+  scale_x_discrete( breaks=c(0, 1), labels=c("Other", "Govt/com.") ) +
+  labs(colour = "Treatment Agreement", fill = "Treatment Agreement" ) +
+  xlab("Insurance")
+
+# Single
+single.p <- ggplot(hd2, aes(x=Single, fill=trt_match, colour=trt_match)) +
+  geom_bar(width = 0.25) + 
+  scale_x_discrete( breaks=c(0, 1), labels=c("False", "True") ) +
+  labs(colour = "Treatment Agreement", fill = "Treatment Agreement" ) +
+  xlab("Single")
+
+# Married
+married.p <- ggplot(hd2, aes(x=Married, fill=trt_match, colour=trt_match)) +
+  geom_bar(width = 0.25) + 
+  scale_x_discrete( breaks=c(0, 1), labels=c("False", "True") ) +
+  labs(colour = "Treatment Agreement", fill = "Treatment Agreement" ) +
+  xlab("Married")
+
+# Region
+region.p <- ggplot(hd2, aes(x=Urban, fill=trt_match, colour=trt_match)) +
+  geom_bar(width = 0.25) + 
+  scale_x_discrete( breaks=c(0, 1), labels=c("rural", "urban") ) +
+  labs(colour = "Treatment Agreement", fill = "Treatment Agreement" ) +
+  xlab("Region")
+
+# Arrange into grids.
+grid.arrange(age.p, male.p, race.p, gc.p, single.p, married.p, region.p, ncol=2)
