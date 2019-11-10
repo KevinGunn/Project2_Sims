@@ -137,6 +137,8 @@ prop_fit <- glm(iv_dose ~ gender + age + elixhauser + Weight_kg + GCS + HR + Sys
 
 names( which( coef(summary(prop_fit))[,4] < 0.05 ) ) 
 
+names( which( coef(summary(prop_fit))[,4] < 0.000001 ) ) 
+
 xtable(summary(prop_fit))
 
 
@@ -150,14 +152,15 @@ mean( sepdat_iv_dose_b1$reward )
 
 AIPWE_b <- function( Y, A, X, prop_score, eta){
   
-  g_x_eta <- ifelse(X%*%eta > 0, 1, 0)
+  g_x_eta <- ifelse(eta %*% t(X) > 0, 1, 0)
   
   C_eta <- A*g_x_eta + (1-A)*( 1 - g_x_eta )
   
   prop_c <- prop_score*g_x_eta + (1-prop_score)*( 1 - g_x_eta )
   
-  dat <- data.frame(Y,A,X)
-  mu <- glm(Y ~ X + A*X, data=dat, family = binomial(link = "logit"))
+  #dat <- data.frame(Y,A,X)
+  #print(dat$X)
+  mu <- glm(Y ~ X + A*X, family = binomial(link = "logit"))
   
   A <- rep(1, length(Y))
   dat.m1 <- data.frame(X, A*X)
@@ -176,7 +179,7 @@ AIPWE_b <- function( Y, A, X, prop_score, eta){
 
 AIPWE_c <- function( Z, A, X, prop_score, eta){
   
-  g_x_eta <- ifelse(X%*%eta > 0, 1, 0)
+  g_x_eta <- ifelse(eta %*% t(X) > 0, 1, 0)
   
   C_eta <- A*g_x_eta + (1-A)*( 1 - g_x_eta )
   
@@ -242,13 +245,12 @@ QP_IRL <- function(Y, Z, A, X, prop_score, k.num, eps, lambda, eta0){
   
   mu_clin <- c( V_Y_clin, hinge(V_Z_clin_tol) )
   
-  # Initialize decision rule
-  lin_rule_coeff <- eta0     #c(0.01 , 0 , -0.5 , 0 , 0 , 0) 
-  lin_mod1 <- as.vector(lin_rule_coeff %*% t(X))
+  # Initialize decision rule    #c(0.01 , 0 , -0.5 , 0 , 0 , 0) 
+  lin_mod1 <- as.vector(eta0 %*% t(X))
   rule1 <- trt_rule(lin_mod1)
   
   #rule1
-  print(mean(rule1 == data$A))
+  print(mean(rule1 == A))
   
   # Initial estimated rule
   VY_learner <- AIPWE_b(Y,A,X,prop_score,eta0)
@@ -366,7 +368,7 @@ QP_IRL <- function(Y, Z, A, X, prop_score, k.num, eps, lambda, eta0){
     #print(lin_modk)
     rulek <- trt_rule(lin_modk)
     
-    print( c("rule_k",mean(rulek == data$A)) )
+    print( c("rule_k",mean(rulek == A)) )
     
     # k estimated rule and value functions.
     VY_learner <- AIPWE_b(Y,A,X,prop_score,eta_k)
@@ -404,7 +406,34 @@ QP_IRL <- function(Y, Z, A, X, prop_score, k.num, eps, lambda, eta0){
 
 # Real Data Application.
 
+# Change rewards for those who survived/ did not survive in first bloc.
+reward <- sepdat_iv_dose_b1$reward
+reward[which(sepdat_iv_dose_b1$reward== 15)] <- 0
+reward[which(sepdat_iv_dose_b1$reward== -15)] <- 0
 
+# Recode died in hospital variable.
+recode_dh <- sepdat_iv_dose_b1$died_in_hosp
+recode_dh[which(sepdat_iv_dose_b1$died_in_hosp == 1)] <- 0
+recode_dh[which(sepdat_iv_dose_b1$died_in_hosp == 0)] <- 1
+
+# Covariates of interest.
+xvars <-  as.matrix( sepdat_iv_dose_b1[, names( which( coef(summary(prop_fit))[,4] < 0.000001 ) )] )
+
+
+# real data application
+npar<-12
+eta0<-matrix(0,2*npar,npar)
+for(i in 1:npar){
+  eta0[2*i-1,i]<-1
+  eta0[2*i,i]<--1
+}
+
+eta0_guess <- eta0[2,]
+
+# QP-IRL application.
+AL_HIV <- QP_IRL( Y= recode_dh, Z=sepdat_iv_dose_b1$reward , A=sepdat_iv_dose_b1$iv_dose, 
+                  X = xvars , prop_score = prop_fit$fitted.values , k.num=50, eps = 0.00001, 
+                  lambda=0, eta0 = eta0_guess )
 
 
 
