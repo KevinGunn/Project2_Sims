@@ -238,7 +238,7 @@ opt.eta <- function(eta, Y, Z, A, X, prop_score, M, lambda){
   VY <- IPWE_b(Y, A, X, prop_score, eta)
   VZ <- IPWE_c(Z, A, X, prop_score, eta)
   
-  return( - (VZ - M*(VY-lambda)*as.numeric(VY>lambda)) )
+  return( -(VZ - M*(VY-lambda)*as.numeric(VY>lambda)) )
 }
 
 # Condition handling code to avoid bad starting values in nmk.
@@ -268,10 +268,10 @@ QP_IRL <- function(Y, Z, A, X, prop_score, k.num, eps, lambda, eta0){
   #########################
   
   # Clinicians Value function
-  V_Y_clin <-  as.numeric( mean(Y) )
-  V_Z_clin_tol <- as.numeric( mean(Z) ) - lambda 
+  V_Z_clin <-  as.numeric( mean(Z) )
+  V_Y_clin_tol <- as.numeric( mean(Y) ) - lambda 
   
-  mu_clin <- c( V_Y_clin, hinge(V_Z_clin_tol) )
+  mu_clin <- c( V_Z_clin, hinge(V_Y_clin_tol) )
   
   # Initialize decision rule    #c(0.01 , 0 , -0.5 , 0 , 0 , 0) 
   lin_mod1 <- as.vector(eta0 %*% t(X))
@@ -282,16 +282,16 @@ QP_IRL <- function(Y, Z, A, X, prop_score, k.num, eps, lambda, eta0){
   print( c("rule 0", mean(rule1 == A)) )
   
   # Initial estimated rule
-  #VY_learner <- AIPWE_b(Y,A,X,prop_score,eta0)
-  #VZ_learner <- AIPWE_c(Z,A,X,prop_score,eta0)
-  VY_learner <- IPWE_b(Y,A,X,prop_score,eta0)
-  VZ_learner <- IPWE_c(Z,A,X,prop_score,eta0)
+  VY_learner <- AIPWE_b(Y,A,X,prop_score,eta0)
+  VZ_learner <- AIPWE_c(Z,A,X,prop_score,eta0)
+  #VY_learner <- IPWE_b(Y,A,X,prop_score,eta0)
+  #VZ_learner <- IPWE_c(Z,A,X,prop_score,eta0)
   
-  mu_learner <- c( VY_learner, hinge( VZ_learner - lambda ) )
+  mu_learner <- c( VZ_learner, hinge( VY_learner - lambda ) )
   
   # Create matrix for QP program.
   mu_mat <- rbind(mu_clin, mu_learner)
-  colnames(mu_mat) <- c("VY","VZ_tol")
+  colnames(mu_mat) <- c("VZ","VY_tol")
   rownames(mu_mat) <- NULL
   
   Labels <- c(1,-1)
@@ -317,9 +317,9 @@ QP_IRL <- function(Y, Z, A, X, prop_score, k.num, eps, lambda, eta0){
     c_m1 <- c(1,1,0)
     c_m2 <- rbind(c(1,0,0),c(0,1,0))
     
-    VY_diff <- (L_mu_mat[-1,2] - L_mu_mat[1,2] )
-    VZ_diff <- (L_mu_mat[-1,3] - L_mu_mat[1,3] )
-    V_diff <- cbind( VY_diff, VZ_diff, q_coef)
+    VZ_diff <- (L_mu_mat[-1,2] - L_mu_mat[1,2] )
+    VY_diff <- (L_mu_mat[-1,3] - L_mu_mat[1,3] )
+    V_diff <- cbind( VZ_diff, VY_diff, q_coef)
     
     Am <- rbind(c_m1,c_m2, V_diff) 
     
@@ -338,7 +338,7 @@ QP_IRL <- function(Y, Z, A, X, prop_score, k.num, eps, lambda, eta0){
     
     # Plot of Value functions.
     plot(L_mu_mat[-1,-1],col="blue", pch=19, main="Value Function Estimation",
-         xlab="Risk 1", ylab = "Risk 2", cex=1.2, ylim = c(0,1), xlim = c(0,1))
+         xlab="Risk 1", ylab = "Risk 2", cex=1.2, ylim = c(-0.3,0.5), xlim = c(0,1))
     points(x= L_mu_mat[1,2],y= L_mu_mat[1,3],bg="red",pch=22,cex=1.5) 
     text(L_mu_mat[-1,-1], labels = seq(from=1, to = k) , pos = 4 )
     text(x = L_mu_mat[1,2], y= L_mu_mat[1,3], labels = "Clinicians" , pos = 1 )
@@ -402,13 +402,13 @@ QP_IRL <- function(Y, Z, A, X, prop_score, k.num, eps, lambda, eta0){
     print( c("rule_k",mean(rulek == A)) )
     
     # k estimated rule and value functions.
-    #VY_learner <- AIPWE_b(Y,A,X,prop_score,eta_k)
-    #VZ_learner <- AIPWE_c(Z,A,X,prop_score,eta_k)
-    VY_learner <- IPWE_b(Y,A,X,prop_score,eta_k)
-    VZ_learner <- IPWE_c(Z,A,X,prop_score,eta_k)
+    VY_learner <- AIPWE_b(Y,A,X,prop_score,eta_k)
+    VZ_learner <- AIPWE_c(Z,A,X,prop_score,eta_k)
+    #VY_learner <- IPWE_b(Y,A,X,prop_score,eta_k)
+    #VZ_learner <- IPWE_c(Z,A,X,prop_score,eta_k)
     
     # Update Value functions.
-    mu_learner <- c(VY_learner, hinge(VZ_learner - lambda) )
+    mu_learner <- c(VZ_learner, hinge(VY_learner - lambda) )
     L_mu_mat <- rbind(L_mu_mat, c(-1,mu_learner) )
     
     #print(sum(rulek == data$A) / dim(data)[1])
@@ -481,10 +481,21 @@ lambda.in <- fit$lambda.1se
 coef(fit,s='lambda.1se',exact=TRUE)
 
 # Covariates of interest.
-xvars_final <- xvars[, names(which(coef(fit,s='lambda.1se',exact=TRUE)[-1,1] != 0)) ]
-dat_prop <- data.frame(sepdat_iv_dose_b1$iv_dose, xvars_final)
-prop_fit <- predict(glmnet(x=xvars,y=sepdat_iv_dose_b1$iv_dose, family="binomial",alpha=1),
-                    s=lambda.in, type = "response", newx = xvars)
+#xvars_final <- xvars[, names(which(coef(fit,s='lambda.1se',exact=TRUE)[-1,1] != 0)) ]
+#xvars_final <- xvars_final[ , c(1:4) ]
+#dim(xvars_final)
+#dat_prop <- data.frame(sepdat_iv_dose_b1$iv_dose, xvars_final)
+#prop_fit <- predict(glmnet(x=xvars,y=sepdat_iv_dose_b1$iv_dose, family="binomial",alpha=1),
+#                    s=lambda.in, type = "response", newx = xvars)
+#prop_fit <- predict(glmnet(x=xvars,y=sepdat_iv_dose_b1$iv_dose, family="binomial",alpha=1),
+#                    s=0.018, type = "response", newx = xvars)
+
+lasso_prop <- glmnet(x=xvars,y=sepdat_iv_dose_b1$iv_dose, family="binomial",alpha=1, lambda=0.015)
+prop_fit <- predict(lasso_prop, type = "response", newx = xvars)
+plot(lasso_prop, xvar = "lambda")
+
+xvars_final <- xvars[, names(which(coef(lasso_prop)[-1,1] != 0)) ]
+xvars_final <- cbind(1, xvars_final)
 
 # real data application
 npar<-dim(xvars_final)[2]
@@ -494,13 +505,17 @@ for(i in 1:npar){
   eta0[2*i,i]<- -1
 }
 
-eta0_guess <- eta0[9,]
+#eta0_guess <- eta0[5,]
+eta0_guess <- eta0[3,]
 
 AIPWE_b(Y=sepdat_iv_dose_b1$died_in_hosp, A=sepdat_iv_dose_b1$iv_dose, X=xvars_final,prop_score = prop_fit,eta0_guess)
 AIPWE_c(Z=sepdat_iv_dose_b1$reward, A=sepdat_iv_dose_b1$iv_dose, X=xvars_final,prop_score = prop_fit,eta0_guess)
 
 IPWE_b(Y=sepdat_iv_dose_b1$died_in_hosp, A=sepdat_iv_dose_b1$iv_dose, X=xvars_final,prop_score = prop_fit,eta0_guess)
 IPWE_c(Z=sepdat_iv_dose_b1$reward, A=sepdat_iv_dose_b1$iv_dose, X=xvars_final,prop_score = prop_fit,eta0_guess)
+
+mean(sepdat_iv_dose_b1$died_in_hosp)
+mean(sepdat_iv_dose_b1$reward)
 
 
 # QP-IRL application.
@@ -509,4 +524,9 @@ AL_HIV <- QP_IRL( Y= sepdat_iv_dose_b1$died_in_hosp, Z=sepdat_iv_dose_b1$reward 
                   lambda=0, eta0 = eta0_guess )
 
 
+AIPWE_b(Y=sepdat_iv_dose_b1$died_in_hosp, A=sepdat_iv_dose_b1$iv_dose, X=xvars_final,prop_score = prop_fit,AL_HIV$eta_opt)
+AIPWE_c(Z=sepdat_iv_dose_b1$reward, A=sepdat_iv_dose_b1$iv_dose, X=xvars_final,prop_score = prop_fit,AL_HIV$eta_opt)
+
+IPWE_b(Y=sepdat_iv_dose_b1$died_in_hosp, A=sepdat_iv_dose_b1$iv_dose, X=xvars_final,prop_score = prop_fit,AL_HIV$eta_opt)
+IPWE_c(Z=sepdat_iv_dose_b1$reward, A=sepdat_iv_dose_b1$iv_dose, X=xvars_final,prop_score = prop_fit,AL_HIV$eta_opt)
 
